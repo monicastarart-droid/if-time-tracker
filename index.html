@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IF Time Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, serif; background: #0f1923; color: #e8e0d4; min-height: 100vh; }
+input, select, textarea, button { font-family: Georgia, serif; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: #2d4a3e; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SUPABASE_URL = “https://ifbmjahpaemywlzxngju.supabase.co”;
+const SUPABASE_KEY = “sb_publishable_1Hahl9864dvmqSHohTNa_Q_SPu38eVY”;
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const IF_TASKS = [
+“Budget - review 12-month expenditure report”,“Budget - Review proposed - IF”,“Budget - review proposed budget w/client”,
+“Client - Invoicing”,“Client Onboarding (Initial intro call & emails)”,“Client Onboarding (service agreement, RC authorization, admin set-up)”,
+“Coaching - budgeting, tracking monthly expenditures, managing SDP funds”,“Coaching - coordinating how SDP services are provided”,
+“Coaching - Education about generic sources of funding”,“Coaching - on how SDP transition works & timeline”,
+“Communication w/client or SDP Team - email, text, phone”,“FMS - Call or email”,“FMS - educating/coaching client”,
+“FMS - Onboarding support (paperwork, meetings, questions, admin)”,“FMS - Purchase Request”,“FMS - Review monthly financials”,
+“FMS - support procuring”,“FMS - Vendor Invoicing”,“Individual Program Planning - IPP support or meeting attendance”,
+“Meeting - Office or Zoom”,“PCP - coaching/educating before PCP meeting”,“PCP - delivery of final doc to SDP Team”,
+“PCP - development”,“PCP - edit, organize photos”,“PCP - final edits w/Circle of Support”,
+“PCP - meeting facilitation w/circle of support”,“PCP - prep form”,“PCP - Scheduling/create zoom”,“PCP - yearly update”,
+“Project Management”,“Renewals - SDP Fiscal Year Renewals”,“Review - client documents”,“Schedule - development”,
+“Social Rec Supports - research & creation”,“Spending Plan - coaching and education”,“Spending Plan - development”,
+“Spending Plan - review & finalize w/client”,“Spending Plan - revisions”,“Staff - coaching client on onboarding & training”,
+“Staff - educating staff on SDP”,“Staff - FMS Onboarding”,“Staff - support finding/procuring”,
+“Support - Administrative tasks”,“Support - advocating for unmet needs and services”,“Support - Client Advocating”,
+“Support - finding resources/vendors to meet needs”,“Vendor - Communication - email, text, phone”,
+“Vendor(s) - FMS Onboarding”,“Vendor(s) - Invoicing”
+];
+
+const TASK_GROUPS = {
+“Budget”: IF_TASKS.filter(t=>t.startsWith(“Budget”)),
+“Client”: IF_TASKS.filter(t=>t.startsWith(“Client”)),
+“Coaching”: IF_TASKS.filter(t=>t.startsWith(“Coaching”)),
+“Communication”: IF_TASKS.filter(t=>t.startsWith(“Communication”)),
+“FMS”: IF_TASKS.filter(t=>t.startsWith(“FMS”)),
+“IPP”: IF_TASKS.filter(t=>t.startsWith(“Individual”)),
+“Meeting”: IF_TASKS.filter(t=>t.startsWith(“Meeting”)),
+“PCP”: IF_TASKS.filter(t=>t.startsWith(“PCP”)),
+“Project Mgmt”: IF_TASKS.filter(t=>t.startsWith(“Project”)),
+“Renewals”: IF_TASKS.filter(t=>t.startsWith(“Renewals”)),
+“Review”: IF_TASKS.filter(t=>t.startsWith(“Review”)),
+“Schedule”: IF_TASKS.filter(t=>t.startsWith(“Schedule”)),
+“Social Rec”: IF_TASKS.filter(t=>t.startsWith(“Social”)),
+“Spending Plan”: IF_TASKS.filter(t=>t.startsWith(“Spending”)),
+“Staff”: IF_TASKS.filter(t=>t.startsWith(“Staff”)),
+“Support”: IF_TASKS.filter(t=>t.startsWith(“Support”)),
+“Vendor”: IF_TASKS.filter(t=>t.startsWith(“Vendor”)),
+};
+
+const FLAT_RATE_SERVICES = [{ id:“pcp-full”, name:“Person Centered Plan (Full)”, amount:1000.00 }];
+const EXPENSE_CATEGORIES = [“Mileage”,“Printing & Copying”,“Postage & Shipping”,“Phone & Internet”,“Supplies”,“Software & Subscriptions”,“Travel”,“Meals”,“Other”];
+const defaultData = { clients:[], projects:[], entries:[], expenses:[], invoices:[], recurringInvoices:[], hourlyRate:75, customServices:[], customTasks:null, customExpenseCategories:[], businessName:“Empowerment Services”, address1:””, address2:””, bizPhone:””, bizEmail:””, logo:””, stateTaxRate:0.093 };
+
+const today = () => new Date().toISOString().split(“T”)[0];
+const formatDate = d => new Date(d+“T12:00:00”).toLocaleDateString(“en-US”,{month:“short”,day:“numeric”,year:“numeric”});
+const formatDuration = m => { if(!m) return “0:00”; return Math.floor(m/60)+”:”+(m%60).toString().padStart(2,“0”); };
+const formatCurrency = n => “$”+(n||0).toFixed(2);
+const formatLive = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60; return h+”:”+m.toString().padStart(2,“0”)+”:”+sc.toString().padStart(2,“0”); };
+
+const CSS = `.nav-btn{background:none;border:none;padding:8px 11px;color:#7eb8a4;font-size:12px;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;} .nav-btn:hover{color:#a8d5c2;} .nav-btn.active{color:#c8f0dc;border-bottom:2px solid #7eb8a4;} .card{background:#17232f;border:1px solid #2a3d4f;border-radius:10px;padding:20px;margin-bottom:16px;} .btn-primary{background:#2d7a5e;color:#e8f5ee;border:none;padding:10px 20px;border-radius:6px;font-size:14px;transition:background .2s;} .btn-primary:hover{background:#3a9470;} .btn-primary:disabled{opacity:.5;cursor:not-allowed;} .btn-secondary{background:#1e3040;color:#a8c8b8;border:1px solid #2d4a3e;padding:8px 16px;border-radius:6px;font-size:13px;} .btn-secondary:hover{background:#243a4e;} .btn-danger{background:#4a2020;color:#e8b4b4;border:1px solid #7a3030;padding:6px 12px;border-radius:5px;font-size:12px;} .field-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#7a9888;margin-bottom:5px;} .field-input{background:#1e3040;border:1px solid #2d4a5e;border-radius:6px;color:#e8e0d4;padding:9px 12px;width:100%;font-size:14px;outline:none;} .field-input:focus{border-color:#7eb8a4;} .field-select{background:#1e3040;border:1px solid #2d4a5e;border-radius:6px;color:#e8e0d4;padding:9px 12px;width:100%;font-size:14px;outline:none;} .section-title{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#4a7060;margin:20px 0 10px;border-bottom:1px solid #1e3040;padding-bottom:6px;} .entry-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #1e3040;} .badge{background:#1a3a2e;color:#7eb8a4;border-radius:12px;padding:3px 10px;font-size:11px;} .total-bar{background:#1a3a2e;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:10px;} .inc-btn{background:#1e3040;color:#7eb8a4;border:1px solid #2d4a6a;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:bold;} .inc-btn:hover{background:#2d4a5e;} .duration-display{font-size:48px;font-weight:bold;color:#c8f0dc;letter-spacing:-1px;text-align:center;padding:10px;} .invoice-table{width:100%;border-collapse:collapse;margin-top:12px;} .invoice-table th{text-align:left;padding:8px 10px;background:#1a3040;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7a9888;} .invoice-table td{padding:9px 10px;border-bottom:1px solid #1e3040;font-size:13px;} .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;} .modal{background:#17232f;border:1px solid #2a3d4f;border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;}`;
+
+function AuthScreen({ onAuth }) {
+const [mode,setMode]=useState(“login”);
+const [email,setEmail]=useState(””);
+const [password,setPassword]=useState(””);
+const [error,setError]=useState(””);
+const [loading,setLoading]=useState(false);
+const [confirm,setConfirm]=useState(false);
+
+const handle=async()=>{
+setError(””);setLoading(true);
+if(mode===“login”){
+const{data,error}=await supabase.auth.signInWithPassword({email,password});
+if(error)setError(error.message); else onAuth(data.user);
+}else{
+const{error}=await supabase.auth.signUp({email,password});
+if(error)setError(error.message); else setConfirm(true);
+}
+setLoading(false);
+};
+
+const s={
+wrap:{minHeight:“100vh”,background:”#0f1923”,display:“flex”,alignItems:“center”,justifyContent:“center”,padding:20},
+box:{background:”#17232f”,border:“1px solid #2a3d4f”,borderRadius:16,padding:40,width:“100%”,maxWidth:400},
+logoMark:{width:42,height:42,background:“linear-gradient(135deg,#2d7a5e,#5db89a)”,borderRadius:10,display:“flex”,alignItems:“center”,justifyContent:“center”,fontSize:22,color:“white”},
+input:{background:”#1e3040”,border:“1px solid #2d4a5e”,borderRadius:8,color:”#e8e0d4”,padding:“12px 14px”,width:“100%”,fontSize:15,outline:“none”,marginBottom:14},
+btn:{background:”#2d7a5e”,color:”#e8f5ee”,border:“none”,padding:14,borderRadius:8,fontSize:15,width:“100%”,cursor:“pointer”,marginBottom:12},
+toggle:{background:“none”,border:“none”,color:”#7eb8a4”,fontSize:13,cursor:“pointer”,width:“100%”,textAlign:“center”},
+error:{background:”#3a1010”,border:“1px solid #7a3030”,borderRadius:8,padding:“10px 14px”,color:”#f0a0a0”,fontSize:13,marginBottom:14},
+label:{fontSize:11,letterSpacing:“0.1em”,textTransform:“uppercase”,color:”#7a9888”,marginBottom:5,display:“block”},
+};
+
+return (
+<div style={s.wrap}>
+<div style={s.box}>
+<div style={{display:“flex”,alignItems:“center”,gap:10,marginBottom:32,justifyContent:“center”}}>
+<div style={s.logoMark}>⧖</div>
+<span style={{fontSize:18,fontWeight:“bold”,color:”#c8f0dc”}}>IF Time Tracker</span>
+</div>
+{confirm ? (
+<div style={{background:”#1a3a2e”,border:“1px solid #2d7a5e”,borderRadius:8,padding:20,textAlign:“center”,color:”#7eb8a4”,fontSize:14,lineHeight:1.6}}>
+<div style={{fontSize:32,marginBottom:12}}>✉</div>
+Check your email to confirm your account, then come back to sign in.
+</div>
+) : (
+<>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:6,textAlign:“center”}}>{mode===“login”?“Welcome back”:“Create your account”}</div>
+<div style={{fontSize:13,color:”#4a7060”,textAlign:“center”,marginBottom:28}}>{mode===“login”?“Sign in to IF Time Tracker”:“Start your 14-day free trial”}</div>
+{error && <div style={s.error}>{error}</div>}
+<label style={s.label}>Email</label>
+<input style={s.input} type=“email” value={email} onChange={e=>setEmail(e.target.value)} placeholder=“your@email.com” />
+<label style={s.label}>Password</label>
+<input style={s.input} type=“password” value={password} onChange={e=>setPassword(e.target.value)} placeholder=”••••••••” onKeyDown={e=>e.key===“Enter”&&handle()} />
+<button style={s.btn} onClick={handle} disabled={loading}>{loading?“Please wait…”:mode===“login”?“Sign In”:“Create Account”}</button>
+<button style={s.toggle} onClick={()=>setMode(mode===“login”?“signup”:“login”)}>
+{mode===“login”?“Don’t have an account? Sign up free”:“Already have an account? Sign in”}
+</button>
+</>
+)}
+</div>
+</div>
+);
+}
+
+function App() {
+const [user,setUser]=useState(null);
+const [data,setData]=useState(defaultData);
+const [loaded,setLoaded]=useState(false);
+const [saving,setSaving]=useState(false);
+const [view,setView]=useState(“timer”);
+const [showMore,setShowMore]=useState(false);
+
+useEffect(()=>{
+supabase.auth.getSession().then(({data:{session}})=>setUser(session?.user??null));
+const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>setUser(session?.user??null));
+return()=>subscription.unsubscribe();
+},[]);
+
+useEffect(()=>{
+if(!user)return;
+(async()=>{
+const{data:rows}=await supabase.from(“user_data”).select(“data”).eq(“user_id”,user.id).single();
+if(rows?.data)setData({…defaultData,…rows.data});
+setLoaded(true);
+})();
+},[user]);
+
+useEffect(()=>{
+if(!loaded||!user)return;
+const t=setTimeout(async()=>{
+setSaving(true);
+await supabase.from(“user_data”).upsert({user_id:user.id,data},{onConflict:“user_id”});
+setSaving(false);
+},1000);
+return()=>clearTimeout(t);
+},[data,loaded,user]);
+
+const updateData=fn=>setData(prev=>({…prev,…fn(prev)}));
+const signOut=async()=>{await supabase.auth.signOut();setUser(null);setData(defaultData);setLoaded(false);};
+
+if(!user)return <AuthScreen onAuth={setUser}/>;
+if(!loaded)return <div style={{display:“flex”,alignItems:“center”,justifyContent:“center”,height:“100vh”,color:”#7eb8a4”,fontSize:18}}>Loading your data…</div>;
+
+return (
+<div style={{fontFamily:“Georgia,serif”,background:”#0f1923”,minHeight:“100vh”,color:”#e8e0d4”}} onClick={()=>setShowMore(false)}>
+<style>{CSS}</style>
+<div style={{background:”#0d1820”,borderBottom:“1px solid #1e3040”,padding:“0 20px”}}>
+<div style={{maxWidth:760,margin:“0 auto”}}>
+<div style={{padding:“14px 0 0”,display:“flex”,alignItems:“center”,justifyContent:“space-between”}}>
+<div style={{display:“flex”,alignItems:“center”,gap:10}}>
+<div style={{width:28,height:28,background:“linear-gradient(135deg,#2d7a5e,#5db89a)”,borderRadius:7,display:“flex”,alignItems:“center”,justifyContent:“center”,fontSize:14}}>⧖</div>
+<span style={{fontSize:15,fontWeight:“bold”,color:”#c8f0dc”}}>Empowerment Services</span>
+<span style={{fontSize:11,color:”#4a7060”,marginLeft:4,letterSpacing:“0.06em”}}>IF TIME TRACKER</span>
+</div>
+<div style={{display:“flex”,alignItems:“center”,gap:10}}>
+{saving&&<span style={{fontSize:11,color:”#4a7060”}}>Saving…</span>}
+<span style={{fontSize:11,color:”#4a7060”}}>{user.email}</span>
+<button className=“btn-secondary” style={{fontSize:11,padding:“4px 10px”}} onClick={signOut}>Sign Out</button>
+</div>
+</div>
+<nav style={{display:“flex”,alignItems:“center”,flexWrap:“wrap”,gap:0,marginTop:4}}>
+{[[“timer”,“⏱ Time”],[“timesheets”,“📋 Timesheets”],[“expenses”,“💳 Expenses”],[“clients”,“👤 Clients”],[“invoices”,“📄 Invoices”]].map(([id,label])=>(
+<button key={id} className={“nav-btn”+(view===id?” active”:””)} onClick={()=>{setView(id);setShowMore(false);}}>{label}</button>
+))}
+<div style={{position:“relative”}} onClick={e=>e.stopPropagation()}>
+<button className={“nav-btn”+([“reports”,“tax”,“tasks”,“settings”].includes(view)?” active”:””)} onClick={()=>setShowMore(m=>!m)} style={{display:“flex”,alignItems:“center”,gap:4}}>
+{view===“reports”?“📊 Reports”:view===“tasks”?“✏️ Tasks”:view===“tax”?“💰 Tax”:view===“settings”?“⚙ Settings”:“More”} <span style={{fontSize:9}}>{showMore?“▲”:“▼”}</span>
+</button>
+{showMore&&(
+<div style={{position:“absolute”,top:“100%”,left:0,background:”#17232f”,border:“1px solid #2a3d4f”,borderRadius:8,minWidth:140,zIndex:200,boxShadow:“0 8px 24px rgba(0,0,0,.4)”,overflow:“hidden”}}>
+{[[“reports”,“📊 Reports”],[“tax”,“💰 Tax”],[“tasks”,“✏️ Tasks”],[“settings”,“⚙ Settings”]].map(([id,label])=>(
+<button key={id} onClick={()=>{setView(id);setShowMore(false);}} style={{display:“block”,width:“100%”,textAlign:“left”,padding:“12px 16px”,background:view===id?”#1e3040”:“transparent”,border:“none”,color:view===id?”#c8f0dc”:”#a8c8b8”,fontSize:13,cursor:“pointer”,borderBottom:“1px solid #1e3040”}}>{label}</button>
+))}
+</div>
+)}
+</div>
+</nav>
+</div>
+</div>
+<div style={{maxWidth:760,margin:“0 auto”,padding:“24px 20px”}}>
+{view===“timer”&&<TimerView data={data} updateData={updateData}/>}
+{view===“timesheets”&&<TimesheetsView data={data} updateData={updateData}/>}
+{view===“expenses”&&<ExpensesView data={data} updateData={updateData}/>}
+{view===“clients”&&<ClientsView data={data} updateData={updateData}/>}
+{view===“invoices”&&<InvoicesView data={data} updateData={updateData}/>}
+{view===“reports”&&<ReportsView data={data}/>}
+{view===“tax”&&<TaxView data={data} updateData={updateData}/>}
+{view===“tasks”&&<TasksView data={data} updateData={updateData}/>}
+{view===“settings”&&<SettingsView data={data} updateData={updateData}/>}
+</div>
+</div>
+);
+}
+
+function TimerView({data,updateData}){
+const[mode,setMode]=useState(“manual”);
+const[duration,setDuration]=useState(0);
+const[timerRunning,setTimerRunning]=useState(false);
+const[timerSeconds,setTimerSeconds]=useState(0);
+const[timerStart,setTimerStart]=useState(null);
+const[clientId,setClientId]=useState(””);
+const[projectId,setProjectId]=useState(””);
+const[task,setTask]=useState(””);
+const[notes,setNotes]=useState(””);
+const[date,setDate]=useState(today());
+const[saved,setSaved]=useState(false);
+const[taskSearch,setTaskSearch]=useState(””);
+
+useEffect(()=>{
+if(!timerRunning)return;
+const iv=setInterval(()=>setTimerSeconds(Math.floor((Date.now()-timerStart)/1000)),1000);
+return()=>clearInterval(iv);
+},[timerRunning,timerStart]);
+
+const activeTasks=data.customTasks||IF_TASKS;
+const filteredGroups=Object.entries(TASK_GROUPS).reduce((acc,[g,ts])=>{
+const f=ts.filter(t=>activeTasks.includes(t)&&t.toLowerCase().includes(taskSearch.toLowerCase()));
+if(f.length)acc[g]=f; return acc;
+},{});
+const customOnly=activeTasks.filter(t=>!IF_TASKS.includes(t)&&t.toLowerCase().includes(taskSearch.toLowerCase()));
+if(customOnly.length)filteredGroups[“Custom”]=customOnly;
+
+const clientProjects=(data.projects||[]).filter(p=>p.clientId===clientId);
+const selectedProject=(data.projects||[]).find(p=>p.id===projectId);
+const effectiveRate=selectedProject?.rate||data.hourlyRate;
+const activeDuration=mode===“timer”?Math.round(timerSeconds/60):duration;
+
+const handleSave=()=>{
+const fd=mode===“timer”?Math.round(timerSeconds/60):duration;
+if(!clientId||!task||!fd)return;
+const proj=(data.projects||[]).find(p=>p.id===projectId);
+const effectiveRate=proj?.rate||data.hourlyRate;
+const entry={id:Date.now().toString(),clientId,projectId,task,notes,date,duration:fd,rate:effectiveRate,billed:false};
+updateData(prev=>({entries:[entry,…prev.entries]}));
+setDuration(0);setTimerSeconds(0);setTimerRunning(false);setTask(””);setNotes(””);setProjectId(””);setDate(today());
+setSaved(true);setTimeout(()=>setSaved(false),2000);
+};
+
+return(
+<div>
+<div style={{marginBottom:20}}>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:12}}>New Time Entry</div>
+<div style={{display:“flex”,background:”#17232f”,border:“1px solid #2a3d4f”,borderRadius:8,padding:4,gap:4}}>
+{[[“manual”,“⊞ Log Time”],[“timer”,“▶ Start Timer”]].map(([m,l])=>(
+<button key={m} onClick={()=>{setMode(m);setDuration(0);setTimerSeconds(0);setTimerRunning(false);}} style={{flex:1,padding:“8px 0”,borderRadius:6,border:“none”,fontSize:13,cursor:“pointer”,background:mode===m?”#2d7a5e”:“transparent”,color:mode===m?”#c8f0dc”:”#4a7060”}}>{l}</button>
+))}
+</div>
+</div>
+
+```
+  {/* Client */}
+  <div className="card">
+    <div className="field-label">Client</div>
+    {data.clients.length===0?<div style={{color:"#4a7060",fontSize:13}}>No clients yet — add one in the Clients tab.</div>:(
+      <select className="field-select" value={clientId} onChange={e=>{setClientId(e.target.value);setProjectId("");}}>
+        <option value="">Select a client...</option>
+        {data.clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+    )}
+  </div>
+
+  {/* Project */}
+  {clientId&&(
+    <div className="card">
+      <div className="field-label">Project</div>
+      <select className="field-select" value={projectId} onChange={e=>setProjectId(e.target.value)}>
+        <option value="">No project</option>
+        {clientProjects.map(p=><option key={p.id} value={p.id}>{p.name}{p.rate?" ($"+p.rate+"/hr)":""}</option>)}
+      </select>
+    </div>
+  )}
+
+  {/* Task */}
+  <div className="card">
+    <div className="field-label">Task</div>
+    <input className="field-input" placeholder="Search tasks..." value={taskSearch} onChange={e=>setTaskSearch(e.target.value)} style={{marginBottom:8}}/>
+    <select className="field-select" value={task} onChange={e=>{setTask(e.target.value);setTaskSearch("");}} size={taskSearch?Math.min(8,activeTasks.filter(t=>t.toLowerCase().includes(taskSearch.toLowerCase())).length+1):1}>
+      <option value="">Select a task...</option>
+      {taskSearch?activeTasks.filter(t=>t.toLowerCase().includes(taskSearch.toLowerCase())).map(t=><option key={t} value={t}>{t}</option>)
+        :Object.entries(filteredGroups).map(([g,ts])=><optgroup key={g} label={"— "+g+" —"}>{ts.map(t=><option key={t} value={t}>{t}</option>)}</optgroup>)}
+    </select>
+    {task&&<div className="badge" style={{marginTop:8,display:"inline-block"}}>✓ {task}</div>}
+  </div>
+
+  {/* Duration / Timer */}
+  <div className="card">
+    {mode==="manual"?(
+      <>
+        <div className="field-label">Duration</div>
+        <div className="duration-display">{formatDuration(duration)}</div>
+        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
+          {[15,30,60,480].map(m=><button key={m} className="inc-btn" onClick={()=>setDuration(d=>d+m)}>+{m>=60?m/60+"h":m+"m"}</button>)}
+        </div>
+        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:8}}>
+          <button className="btn-secondary" style={{fontSize:12}} onClick={()=>setDuration(d=>Math.max(0,d-15))}>− 0:15</button>
+          <button className="btn-secondary" style={{fontSize:12}} onClick={()=>setDuration(0)}>Clear</button>
+        </div>
+      </>
+    ):(
+      <>
+        <div className="field-label">Live Timer</div>
+        <div className="duration-display" style={{color:timerRunning?"#5db89a":"#c8f0dc",fontSize:44}}>{formatLive(timerSeconds)}</div>
+        {timerRunning&&<div style={{textAlign:"center",marginBottom:8,fontSize:11,color:"#5db89a",letterSpacing:"0.08em",textTransform:"uppercase"}}>● Running</div>}
+        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:8}}>
+          {!timerRunning?(
+            <button className="btn-primary" style={{padding:"10px 32px",fontSize:15,borderRadius:8}} onClick={()=>{setTimerStart(Date.now());setTimerSeconds(0);setTimerRunning(true);}}>▶ Start</button>
+          ):(
+            <button style={{background:"#7a2020",color:"#f0c8c8",border:"none",padding:"10px 32px",fontSize:15,borderRadius:8,cursor:"pointer"}} onClick={()=>setTimerRunning(false)}>■ Stop</button>
+          )}
+          {timerSeconds>0&&!timerRunning&&<button className="btn-secondary" onClick={()=>{setTimerSeconds(0);setTimerStart(null);}}>Reset</button>}
+        </div>
+        {timerSeconds>0&&!timerRunning&&<div style={{textAlign:"center",marginTop:8,color:"#7eb8a4",fontSize:13}}>Logged: {formatDuration(Math.round(timerSeconds/60))} · {formatCurrency((Math.round(timerSeconds/60)/60)*effectiveRate)}</div>}
+      </>
+    )}
+  </div>
+
+  {/* Date, Amount, Notes */}
+  <div className="card">
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+      <div><div className="field-label">Date</div><input type="date" className="field-input" value={date} onChange={e=>setDate(e.target.value)}/></div>
+      <div><div className="field-label">Amount</div><div style={{background:"#1e3040",border:"1px solid #2d4a5e",borderRadius:6,padding:"9px 12px",color:"#7eb8a4",fontSize:14}}>{formatCurrency((activeDuration/60)*effectiveRate)}{selectedProject?.rate&&<span style={{fontSize:11,color:"#4a7060",marginLeft:6}}>(${effectiveRate}/hr)</span>}</div></div>
+    </div>
+    <div><div className="field-label">Notes (optional)</div><textarea className="field-input" rows={2} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Add any notes..." style={{resize:"vertical"}}/></div>
+  </div>
+
+  <button className="btn-primary" style={{width:"100%",padding:14,fontSize:15,borderRadius:8,opacity:(!clientId||!task||!activeDuration)?.5:1}} onClick={handleSave} disabled={!clientId||!task||!activeDuration}>
+    {saved?"✓ Entry Saved!":"Save Time Entry"}
+  </button>
+</div>
+```
+
+);
+}
+
+function TimesheetsView({data,updateData}){
+const[filterClient,setFilterClient]=useState(“all”);
+const entries=(data.entries||[]).filter(e=>filterClient===“all”||e.clientId===filterClient).sort((a,b)=>b.date.localeCompare(a.date));
+const grouped=entries.reduce((acc,e)=>{if(!acc[e.date])acc[e.date]=[];acc[e.date].push(e);return acc;},{});
+const totalMins=entries.reduce((s,e)=>s+e.duration,0);
+const totalAmount=entries.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+return(
+<div>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:20}}>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”}}>Timesheets</div>
+<select className=“field-select” style={{width:“auto”}} value={filterClient} onChange={e=>setFilterClient(e.target.value)}>
+<option value="all">All Clients</option>
+{data.clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+</select>
+</div>
+{entries.length===0?<div className=“card” style={{textAlign:“center”,color:”#4a7060”,padding:40}}>No time entries yet.</div>:(
+<>
+<div className="total-bar" style={{marginBottom:20}}>
+<div><div style={{fontSize:11,color:”#4a7060”,textTransform:“uppercase”,letterSpacing:“0.08em”}}>Total Hours</div><div style={{fontSize:20,fontWeight:“bold”,color:”#c8f0dc”}}>{formatDuration(totalMins)}</div></div>
+<div style={{textAlign:“right”}}><div style={{fontSize:11,color:”#4a7060”,textTransform:“uppercase”,letterSpacing:“0.08em”}}>Total Amount</div><div style={{fontSize:20,fontWeight:“bold”,color:”#7eb8a4”}}>{formatCurrency(totalAmount)}</div></div>
+</div>
+{Object.entries(grouped).map(([d,des])=>(
+<div key={d}>
+<div className="section-title">{formatDate(d)}</div>
+{des.map(e=>{
+const c=data.clients.find(cl=>cl.id===e.clientId);
+const p=(data.projects||[]).find(pr=>pr.id===e.projectId);
+return(
+<div key={e.id} className="entry-row">
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontSize:13,color:”#e8e0d4”,marginBottom:2,overflow:“hidden”,textOverflow:“ellipsis”,whiteSpace:“nowrap”}}>{e.task}</div>
+<div style={{fontSize:11,color:”#4a7060”}}>{c?.name}{p?” · “+p.name:””}{e.notes?” · “+e.notes:””}</div>
+</div>
+<div style={{textAlign:“right”,flexShrink:0}}>
+<div style={{fontSize:14,color:”#c8f0dc”,fontWeight:“bold”}}>{formatDuration(e.duration)}</div>
+<div style={{fontSize:12,color:”#7eb8a4”}}>{formatCurrency((e.duration/60)*e.rate)}</div>
+</div>
+<button className=“btn-danger” onClick={()=>updateData(prev=>({entries:prev.entries.filter(en=>en.id!==e.id)}))}>✕</button>
+</div>
+);
+})}
+</div>
+))}
+</>
+)}
+</div>
+);
+}
+
+function ExpensesView({data,updateData}){
+const[showForm,setShowForm]=useState(false);
+const[category,setCategory]=useState(””);
+const[description,setDescription]=useState(””);
+const[amount,setAmount]=useState(””);
+const[date,setDate]=useState(today());
+const[newCat,setNewCat]=useState(””);
+const[showAddCat,setShowAddCat]=useState(false);
+
+const allCategories=[…EXPENSE_CATEGORIES,…(data.customExpenseCategories||[])];
+
+const addCategory=()=>{
+if(!newCat.trim()||allCategories.includes(newCat.trim()))return;
+updateData(prev=>({customExpenseCategories:[…(prev.customExpenseCategories||[]),newCat.trim()]}));
+setCategory(newCat.trim());
+setNewCat(””);setShowAddCat(false);
+};
+
+const deleteCustomCat=cat=>updateData(prev=>({customExpenseCategories:(prev.customExpenseCategories||[]).filter(c=>c!==cat)}));
+
+const save=()=>{
+if(!amount||!description)return;
+const exp={id:Date.now().toString(),category,description,amount:parseFloat(amount)||0,date};
+updateData(prev=>({expenses:[exp,…(prev.expenses||[])]}));
+setCategory(””);setDescription(””);setAmount(””);setDate(today());setShowForm(false);
+};
+
+const expenses=(data.expenses||[]).sort((a,b)=>b.date.localeCompare(a.date));
+const grouped=expenses.reduce((acc,e)=>{if(!acc[e.date])acc[e.date]=[];acc[e.date].push(e);return acc;},{});
+const total=expenses.reduce((s,e)=>s+e.amount,0);
+const byCategory=allCategories.map(cat=>({cat,total:expenses.filter(e=>e.category===cat).reduce((s,e)=>s+e.amount,0)})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
+
+return(
+<div>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:20}}>
+<div>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”}}>Business Expenses</div>
+<div style={{fontSize:12,color:”#4a7060”,marginTop:2}}>Track deductible business costs for tax purposes</div>
+</div>
+<button className=“btn-primary” onClick={()=>setShowForm(!showForm)}>+ Add Expense</button>
+</div>
+
+```
+  {showForm&&(
+    <div className="card" style={{marginBottom:20,borderColor:"#2d7a5e"}}>
+      <div style={{fontSize:14,fontWeight:"bold",color:"#c8f0dc",marginBottom:14}}>New Business Expense</div>
+      <div style={{display:"grid",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+              <div className="field-label" style={{margin:0}}>Category</div>
+              <button style={{background:"none",border:"none",color:"#7eb8a4",fontSize:11,cursor:"pointer"}} onClick={()=>setShowAddCat(!showAddCat)}>+ New Category</button>
+            </div>
+            {showAddCat&&(
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                <input className="field-input" value={newCat} onChange={e=>setNewCat(e.target.value)} placeholder="Category name..." onKeyDown={e=>e.key==="Enter"&&addCategory()} autoFocus style={{fontSize:12}}/>
+                <button className="btn-primary" style={{fontSize:11,padding:"6px 10px",whiteSpace:"nowrap"}} onClick={addCategory}>Add</button>
+                <button className="btn-secondary" style={{fontSize:11,padding:"6px 8px"}} onClick={()=>{setShowAddCat(false);setNewCat("");}}>x</button>
+              </div>
+            )}
+            <select className="field-select" value={category} onChange={e=>setCategory(e.target.value)}>
+              <option value="">Select...</option>
+              {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+              {(data.customExpenseCategories||[]).length>0&&(
+                <optgroup label="Custom">
+                  {(data.customExpenseCategories||[]).map(c=><option key={c} value={c}>{c}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </div>
+          <div><div className="field-label">Amount ($) *</div>
+            <input className="field-input" type="number" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/>
+          </div>
+        </div>
+        <div><div className="field-label">Description *</div>
+          <input className="field-input" value={description} onChange={e=>setDescription(e.target.value)} placeholder="What was this expense for?"/>
+        </div>
+        <div><div className="field-label">Date</div>
+          <input type="date" className="field-input" value={date} onChange={e=>setDate(e.target.value)}/>
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <button className="btn-primary" onClick={save} disabled={!amount||!description}>Save Expense</button>
+          <button className="btn-secondary" onClick={()=>setShowForm(false)}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {(data.customExpenseCategories||[]).length>0&&(
+    <div className="card" style={{marginBottom:16,borderColor:"#2d4a5e"}}>
+      <div style={{fontSize:12,fontWeight:"bold",color:"#c8f0dc",marginBottom:8}}>Custom Categories</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {(data.customExpenseCategories||[]).map(cat=>(
+          <div key={cat} style={{display:"flex",alignItems:"center",gap:5,background:"#1e3040",border:"1px solid #2d4a5e",borderRadius:20,padding:"4px 10px"}}>
+            <span style={{fontSize:12,color:"#a8c8b8"}}>{cat}</span>
+            <button style={{background:"none",border:"none",color:"#4a7060",cursor:"pointer",fontSize:11}} onClick={()=>deleteCustomCat(cat)}>x</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
+  {expenses.length>0&&(
+    <>
+      <div className="total-bar" style={{marginBottom:16}}>
+        <div><div style={{fontSize:11,color:"#4a7060",textTransform:"uppercase",letterSpacing:"0.08em"}}>Total Expenses</div><div style={{fontSize:24,fontWeight:"bold",color:"#c8f0dc"}}>{formatCurrency(total)}</div></div>
+        <div style={{textAlign:"right"}}><div style={{fontSize:11,color:"#4a7060",textTransform:"uppercase",letterSpacing:"0.08em"}}>Tax Deductible</div><div style={{fontSize:13,color:"#7eb8a4",marginTop:2}}>All expenses shown</div></div>
+      </div>
+      {byCategory.length>0&&(
+        <div className="card" style={{marginBottom:16}}>
+          <div style={{fontSize:13,fontWeight:"bold",color:"#c8f0dc",marginBottom:10}}>By Category</div>
+          {byCategory.map(({cat,total:ct})=>{
+            const pct=Math.round((ct/total)*100);
+            return(
+              <div key={cat} style={{marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
+                  <span style={{color:"#a8c8b8"}}>{cat}</span>
+                  <span style={{color:"#c8f0dc",fontWeight:"bold"}}>{formatCurrency(ct)} <span style={{color:"#4a7060",fontWeight:"normal"}}>({pct}%)</span></span>
+                </div>
+                <div style={{background:"#0f1923",borderRadius:3,height:4,overflow:"hidden"}}>
+                  <div style={{width:pct+"%",height:"100%",background:"#2d7a5e",borderRadius:3}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  )}
+
+  {expenses.length===0?<div className="card" style={{textAlign:"center",color:"#4a7060",padding:40}}>No expenses yet. Add your first business expense above.</div>
+    :Object.entries(grouped).map(([d,exps])=>(
+      <div key={d}>
+        <div className="section-title">{formatDate(d)}</div>
+        {exps.map(exp=>(
+          <div key={exp.id} className="entry-row">
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                <div style={{fontSize:13,color:"#e8e0d4",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{exp.description}</div>
+                {exp.category&&<span className="badge">{exp.category}</span>}
+              </div>
+            </div>
+            <div style={{fontSize:14,color:"#c8f0dc",fontWeight:"bold",flexShrink:0}}>{formatCurrency(exp.amount)}</div>
+            <button className="btn-danger" onClick={()=>updateData(prev=>({expenses:(prev.expenses||[]).filter(e=>e.id!==exp.id)}))}>x</button>
+          </div>
+        ))}
+      </div>
+    ))}
+</div>
+```
+
+);
+}
+
+function ClientsView({data,updateData}){
+const[showForm,setShowForm]=useState(false);
+const[name,setName]=useState(””);const[email,setEmail]=useState(””);const[phone,setPhone]=useState(””);const[address,setAddress]=useState(””);
+const[expandedClient,setExpandedClient]=useState(null);
+const[newProjectName,setNewProjectName]=useState(””);const[newProjectUCI,setNewProjectUCI]=useState(””);const[newProjectBudget,setNewProjectBudget]=useState(””);const[newProjectRate,setNewProjectRate]=useState(””);
+const[showProjectForm,setShowProjectForm]=useState(null);
+const[editingClient,setEditingClient]=useState(null);
+const[editName,setEditName]=useState(””);const[editEmail,setEditEmail]=useState(””);const[editPhone,setEditPhone]=useState(””);const[editAddress,setEditAddress]=useState(””);
+
+const addClient=()=>{
+if(!name.trim())return;
+updateData(prev=>({clients:[…prev.clients,{id:Date.now().toString(),name:name.trim(),email,phone,address}]}));
+setName(””);setEmail(””);setPhone(””);setAddress(””);setShowForm(false);
+};
+const deleteClient=id=>{if(window.confirm(“Delete this client?”))updateData(prev=>({clients:prev.clients.filter(c=>c.id!==id)}));};
+const addProject=cid=>{
+if(!newProjectName.trim())return;
+updateData(prev=>({projects:[…(prev.projects||[]),{id:Date.now().toString(),clientId:cid,name:newProjectName.trim(),uci:newProjectUCI.trim(),budget:parseFloat(newProjectBudget)||0,rate:newProjectRate?parseFloat(newProjectRate):null}]}));
+setNewProjectName(””);setNewProjectUCI(””);setNewProjectBudget(””);setNewProjectRate(””);setShowProjectForm(null);
+};
+const saveEdit=()=>{
+if(!editName.trim())return;
+updateData(prev=>({clients:prev.clients.map(c=>c.id===editingClient?{…c,name:editName.trim(),email:editEmail,phone:editPhone,address:editAddress}:c)}));
+setEditingClient(null);
+};
+
+return(
+<div>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:20}}>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”}}>Clients</div>
+<button className=“btn-primary” onClick={()=>setShowForm(!showForm)}>+ Add Client</button>
+</div>
+{showForm&&(
+<div className=“card” style={{marginBottom:20,borderColor:”#2d7a5e”}}>
+<div style={{fontSize:14,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:14}}>New Client</div>
+<div style={{display:“grid”,gap:12}}>
+<div><div className="field-label">Name *</div><input className=“field-input” value={name} onChange={e=>setName(e.target.value)} placeholder=“Full name”/></div>
+<div style={{display:“grid”,gridTemplateColumns:“1fr 1fr”,gap:12}}>
+<div><div className="field-label">Email</div><input className=“field-input” type=“email” value={email} onChange={e=>setEmail(e.target.value)}/></div>
+<div><div className="field-label">Phone</div><input className=“field-input” value={phone} onChange={e=>setPhone(e.target.value)}/></div>
+</div>
+<div><div className="field-label">Address</div><input className=“field-input” value={address} onChange={e=>setAddress(e.target.value)} placeholder=“Street, City, State ZIP”/></div>
+<div style={{display:“flex”,gap:10}}><button className="btn-primary" onClick={addClient}>Save</button><button className=“btn-secondary” onClick={()=>setShowForm(false)}>Cancel</button></div>
+</div>
+</div>
+)}
+{data.clients.length===0?<div className=“card” style={{textAlign:“center”,color:”#4a7060”,padding:40}}>No clients yet.</div>
+:data.clients.map(client=>{
+const unbilled=(data.entries||[]).filter(e=>e.clientId===client.id&&!e.billed).reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+const cProjects=(data.projects||[]).filter(p=>p.clientId===client.id);
+const isExp=expandedClient===client.id;
+return(
+<div key={client.id} className="card">
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“flex-start”}}>
+<div style={{flex:1,cursor:“pointer”}} onClick={()=>setExpandedClient(isExp?null:client.id)}>
+<div style={{display:“flex”,alignItems:“center”,gap:8}}>
+<span style={{color:”#4a7060”,fontSize:12}}>{isExp?“▾”:“▸”}</span>
+<span style={{fontSize:16,fontWeight:“bold”,color:”#c8f0dc”}}>{client.name}</span>
+{cProjects.length>0&&<span className="badge">{cProjects.length} project{cProjects.length!==1?“s”:””}</span>}
+</div>
+{client.email&&<div style={{fontSize:12,color:”#4a7060”,marginTop:2,paddingLeft:20}}>{client.email}</div>}
+{client.address&&<div style={{fontSize:12,color:”#4a7060”,paddingLeft:20}}>{client.address}</div>}
+</div>
+<div style={{display:“flex”,gap:8,alignItems:“center”}}>
+{unbilled>0&&<span style={{color:”#7eb8a4”,fontSize:13,fontWeight:“bold”}}>{formatCurrency(unbilled)} unbilled</span>}
+<button className=“btn-secondary” style={{fontSize:12,padding:“5px 12px”}} onClick={()=>{setEditingClient(client.id);setEditName(client.name);setEditEmail(client.email||””);setEditPhone(client.phone||””);setEditAddress(client.address||””);}}>Manage</button>
+<button className=“btn-danger” onClick={()=>deleteClient(client.id)}>Delete</button>
+</div>
+</div>
+{editingClient===client.id&&(
+<div style={{marginTop:14,paddingTop:14,borderTop:“1px solid #1e3040”}}>
+<div style={{fontSize:13,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:12}}>Edit Client</div>
+<div style={{display:“grid”,gap:10}}>
+<div><div className="field-label">Name *</div><input className=“field-input” value={editName} onChange={e=>setEditName(e.target.value)}/></div>
+<div style={{display:“grid”,gridTemplateColumns:“1fr 1fr”,gap:10}}>
+<div><div className="field-label">Email</div><input className=“field-input” type=“email” value={editEmail} onChange={e=>setEditEmail(e.target.value)}/></div>
+<div><div className="field-label">Phone</div><input className=“field-input” value={editPhone} onChange={e=>setEditPhone(e.target.value)}/></div>
+</div>
+<div><div className="field-label">Address</div><input className=“field-input” value={editAddress} onChange={e=>setEditAddress(e.target.value)} placeholder=“Street, City, State ZIP”/></div>
+<div style={{display:“flex”,gap:8}}><button className="btn-primary" onClick={saveEdit}>Save Changes</button><button className=“btn-secondary” onClick={()=>setEditingClient(null)}>Cancel</button></div>
+</div>
+</div>
+)}
+{isExp&&(
+<div style={{marginTop:14,paddingTop:14,borderTop:“1px solid #1e3040”}}>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:10}}>
+<div className="field-label" style={{margin:0}}>Projects</div>
+<button className=“btn-secondary” style={{fontSize:11,padding:“4px 10px”}} onClick={()=>setShowProjectForm(showProjectForm===client.id?null:client.id)}>+ Add Project</button>
+</div>
+{showProjectForm===client.id&&(
+<div style={{display:“grid”,gap:8,marginBottom:10}}>
+<input className=“field-input” value={newProjectName} onChange={e=>setNewProjectName(e.target.value)} placeholder=“Project name…” autoFocus/>
+<input className=“field-input” value={newProjectUCI} onChange={e=>setNewProjectUCI(e.target.value)} placeholder=“UCI number…”/>
+<input className=“field-input” type=“number” value={newProjectBudget} onChange={e=>setNewProjectBudget(e.target.value)} placeholder=“Yearly budget ($)…”/>
+<input className=“field-input” type=“number” step=“0.01” value={newProjectRate} onChange={e=>setNewProjectRate(e.target.value)} placeholder=“Custom hourly rate (optional, $ /hr)…”/>
+<div style={{display:“flex”,gap:8}}>
+<button className=“btn-primary” onClick={()=>addProject(client.id)}>Save</button>
+<button className=“btn-secondary” onClick={()=>{setShowProjectForm(null);setNewProjectName(””);setNewProjectUCI(””);setNewProjectBudget(””);setNewProjectRate(””);}}>Cancel</button>
+</div>
+</div>
+)}
+{cProjects.length===0?<div style={{color:”#4a7060”,fontSize:13}}>No projects yet.</div>
+:cProjects.map(proj=>{
+const pe=(data.entries||[]).filter(e=>e.projectId===proj.id);
+const pa=pe.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+const pm=pe.reduce((s,e)=>s+e.duration,0);
+const budget=proj.budget||0;
+const pct=budget>0?Math.min(100,(pa/budget)*100):0;
+const rem=budget>0?budget-pa:null;
+const over=rem!==null&&rem<0;
+return(
+<div key={proj.id} style={{background:”#1a2d3d”,borderRadius:8,marginBottom:8,padding:“12px 14px”}}>
+<div style={{display:“flex”,justifyContent:“space-between”,marginBottom:6}}>
+<div style={{display:“flex”,alignItems:“center”,gap:8}}>
+<span style={{color:”#2d7a5e”,fontSize:12}}>◆</span>
+<div><div style={{fontSize:13,color:”#e8e0d4”}}>{proj.name}</div>{proj.uci&&<div style={{fontSize:11,color:”#4a7060”}}>UCI: {proj.uci}</div>}{proj.rate&&<div style={{fontSize:11,color:”#7eb8a4”}}>Rate: ${proj.rate}/hr</div>}</div>
+</div>
+<button className=“btn-danger” style={{padding:“3px 8px”,fontSize:11}} onClick={()=>updateData(prev=>({projects:(prev.projects||[]).filter(p=>p.id!==proj.id)}))}>✕</button>
+</div>
+{budget>0?(
+<>
+<div style={{display:“flex”,justifyContent:“space-between”,fontSize:11,marginBottom:5}}>
+<span style={{color:”#7a9888”}}>{formatCurrency(pa)} of {formatCurrency(budget)}{pm>0?” · “+formatDuration(pm):””}</span>
+<span style={{color:over?”#c85a3a”:”#7eb8a4”,fontWeight:“bold”}}>{over?formatCurrency(Math.abs(rem))+” over”:formatCurrency(rem)+” left”}</span>
+</div>
+<div style={{background:”#0f1923”,borderRadius:4,height:6,overflow:“hidden”}}>
+<div style={{width:pct+”%”,height:“100%”,background:pct>=90?”#c85a3a”:pct>=70?”#c8883a”:”#2d7a5e”,borderRadius:4}}/>
+</div>
+<div style={{fontSize:10,color:”#4a7060”,marginTop:4,textAlign:“right”}}>{pct.toFixed(0)}% used</div>
+</>
+):<div style={{fontSize:11,color:”#4a7060”}}>{pm>0?formatDuration(pm)+” · “+formatCurrency(pa)+” logged · No budget set”:“No budget set”}</div>}
+</div>
+);
+})}
+</div>
+)}
+</div>
+);
+})}
+</div>
+);
+}
+
+function InvoicesView({data,updateData}){
+const[showCreate,setShowCreate]=useState(false);
+const[selectedClient,setSelectedClient]=useState(””);
+const[viewInvoice,setViewInvoice]=useState(null);
+const[addedServices,setAddedServices]=useState([]);
+const[showRecurring,setShowRecurring]=useState(false);
+const[recurringTab,setRecurringTab]=useState(“list”); // list | new
+const[rClientId,setRClientId]=useState(””);
+const[rAmount,setRAmount]=useState(””);
+const[rDescription,setRDescription]=useState(””);
+const[rDay,setRDay]=useState(“1”);
+const allServices=[…FLAT_RATE_SERVICES,…(data.customServices||[])];
+
+const currentMonth=new Date().toISOString().slice(0,7);
+const currentMonthLabel=new Date().toLocaleDateString(“en-US”,{month:“long”,year:“numeric”});
+
+// Check which recurring invoices are ready (not yet generated this month)
+const recurringList=data.recurringInvoices||[];
+const readyToGenerate=recurringList.filter(r=>r.active&&r.lastGenerated!==currentMonth);
+
+const addRecurring=()=>{
+if(!rClientId||!rAmount||!rDescription)return;
+const rec={id:Date.now().toString(),clientId:rClientId,amount:parseFloat(rAmount)||0,description:rDescription,dayOfMonth:parseInt(rDay)||1,active:true,lastGenerated:null};
+updateData(prev=>({recurringInvoices:[…(prev.recurringInvoices||[]),rec]}));
+setRClientId(””);setRAmount(””);setRDescription(””);setRDay(“1”);setRecurringTab(“list”);
+};
+
+const toggleRecurring=id=>{
+updateData(prev=>({recurringInvoices:(prev.recurringInvoices||[]).map(r=>r.id===id?{…r,active:!r.active}:r)}));
+};
+
+const deleteRecurring=id=>{
+if(window.confirm(“Remove this recurring invoice?”))
+updateData(prev=>({recurringInvoices:(prev.recurringInvoices||[]).filter(r=>r.id!==id)}));
+};
+
+const generateAll=()=>{
+const newInvoices=readyToGenerate.map(r=>{
+const client=data.clients.find(c=>c.id===r.clientId);
+return{
+id:Date.now().toString()+r.id,
+invoiceNumber:“INV-”+String((data.invoices||[]).length+readyToGenerate.indexOf(r)+1).padStart(4,“0”),
+clientId:r.clientId,
+date:today(),
+entries:[],expenses:[],services:[],
+recurringDescription:r.description,
+total:r.amount,
+status:“unpaid”,
+isRecurring:true,
+};
+});
+updateData(prev=>({
+invoices:[…newInvoices,…(prev.invoices||[])],
+recurringInvoices:(prev.recurringInvoices||[]).map(r=>readyToGenerate.find(rg=>rg.id===r.id)?{…r,lastGenerated:currentMonth}:r),
+}));
+setShowRecurring(false);
+};
+
+const generateOne=r=>{
+const inv={
+id:Date.now().toString(),
+invoiceNumber:“INV-”+String((data.invoices||[]).length+1).padStart(4,“0”),
+clientId:r.clientId,
+date:today(),
+entries:[],expenses:[],services:[],
+recurringDescription:r.description,
+total:r.amount,
+status:“unpaid”,
+isRecurring:true,
+};
+updateData(prev=>({
+invoices:[inv,…(prev.invoices||[])],
+recurringInvoices:(prev.recurringInvoices||[]).map(ri=>ri.id===r.id?{…ri,lastGenerated:currentMonth}:ri),
+}));
+};
+
+const unbilledByClient=data.clients.map(c=>{
+const entries=(data.entries||[]).filter(e=>e.clientId===c.id&&!e.billed);
+const total=entries.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+return{client:c,entries,expenses:[],total};
+});
+
+const sel=unbilledByClient.find(x=>x.client.id===selectedClient);
+const serviceTotal=addedServices.reduce((s,sv)=>s+sv.amount,0);
+const entryTotal=sel?.entries.reduce((s,e)=>s+(e.duration/60)*e.rate,0)||0;
+const grandTotal=entryTotal+serviceTotal;
+
+const toggleService=sv=>setAddedServices(prev=>prev.find(s=>s.id===sv.id)?prev.filter(s=>s.id!==sv.id):[…prev,sv]);
+
+const createInvoice=()=>{
+if(!selectedClient||grandTotal===0)return;
+const inv={id:Date.now().toString(),invoiceNumber:“INV-”+String((data.invoices||[]).length+1).padStart(4,“0”),clientId:selectedClient,date:today(),entries:sel?.entries||[],expenses:sel?.expenses||[],services:addedServices,total:grandTotal,status:“unpaid”};
+updateData(prev=>({
+invoices:[inv,…(prev.invoices||[])],
+entries:prev.entries.map(e=>(sel?.entries||[]).find(ce=>ce.id===e.id)?{…e,billed:true}:e),
+expenses:(prev.expenses||[]).map(e=>(sel?.expenses||[]).find(ce=>ce.id===e.id)?{…e,billed:true}:e),
+}));
+setShowCreate(false);setSelectedClient(””);setAddedServices([]);setViewInvoice(inv);
+};
+
+const printInvoice=inv=>{
+const client=data.clients.find(c=>c.id===inv.clientId);
+const biz=data.businessName||“Empowerment Services”;
+const eRows=(inv.isRecurring&&inv.recurringDescription?
+“<tr><td>”+inv.recurringDescription+”</td><td>”+formatDate(inv.date)+”</td><td>Monthly</td><td>”+formatCurrency(inv.total)+”</td></tr>”
+:inv.entries.map(e=>”<tr><td>”+e.task+”</td><td>”+formatDate(e.date)+”</td><td>”+formatDuration(e.duration)+”</td><td>”+formatCurrency((e.duration/60)*e.rate)+”</td></tr>”).join(””));
+const xRows=(inv.expenses||[]).map(e=>”<tr><td>”+e.description+(e.category?” (”+e.category+”)”:””)+”</td><td>”+formatDate(e.date)+”</td><td>Expense</td><td>”+formatCurrency(e.amount)+”</td></tr>”).join(””);
+const sRows=(inv.services||[]).map(s=>”<tr><td>”+s.name+”</td><td>Flat Rate</td><td>—</td><td>”+formatCurrency(s.amount)+”</td></tr>”).join(””);
+const logoHtml=data.logo?”<img src='"+data.logo+"' style='max-height:60px;max-width:160px;object-fit:contain;margin-bottom:8px;display:block;'/>”  :””;
+const html=[”<!DOCTYPE html><html><head><title>”+inv.invoiceNumber+”</title>”,
+“<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Georgia,serif;color:#1a2a1a;padding:48px;max-width:750px;margin:0 auto;}”,
+“.header{display:flex;justify-content:space-between;margin-bottom:36px;padding-bottom:24px;border-bottom:2px solid #2d7a5e;}”,
+“.biz-name{font-size:20px;font-weight:bold;color:#1a3a2a;margin-bottom:4px;}.biz-detail{font-size:12px;color:#4a6a5a;line-height:1.6;}”,
+“.inv-num{font-size:24px;font-weight:bold;color:#2d7a5e;text-align:right;}.inv-date{font-size:12px;color:#4a6a5a;text-align:right;margin-top:4px;}”,
+“.bill-to{margin-bottom:28px;}.label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#7a9888;margin-bottom:4px;}.bill-name{font-size:16px;font-weight:bold;}”,
+“table{width:100%;border-collapse:collapse;margin-bottom:24px;}th{text-align:left;padding:10px 12px;background:#f0f8f4;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#4a6a5a;border-bottom:2px solid #2d7a5e;}”,
+“th:last-child{text-align:right;}td{padding:10px 12px;border-bottom:1px solid #e0ece6;font-size:13px;}td:last-child{text-align:right;}”,
+“.total-row td{background:#f0f8f4;font-weight:bold;font-size:15px;border-bottom:none;}”,
+“.status{margin-top:16px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:”+(inv.status===“paid”?”#2d7a5e”:”#c8883a”)+”;}</style></head><body>”,
+“<div class='header'><div>”+logoHtml+”<div class='biz-name'>”+biz+”</div><div class='biz-detail'>”,
+(data.address1?data.address1+”<br>”:””)+(data.address2?data.address2+”<br>”:””)+(data.bizPhone?data.bizPhone+”<br>”:””)+(data.bizEmail?data.bizEmail:””),
+“</div></div><div><div class='inv-num'>”+inv.invoiceNumber+”</div><div class='inv-date'>”+formatDate(inv.date)+”</div></div></div>”,
+“<div class='bill-to'><div class='label'>Bill To</div><div class='bill-name'>”+(client?.name||””)+”</div>”,
+(client?.email?”<div style='font-size:13px;color:#4a6a5a'>”+client.email+”</div>”:””),
+(client?.address?”<div style='font-size:13px;color:#4a6a5a'>”+client.address+”</div>”:””),
+“</div>”,
+“<table><thead><tr><th>Description</th><th>Date</th><th>Hours</th><th>Amount</th></tr></thead>”,
+“<tbody>”+eRows+xRows+sRows+”<tr class='total-row'><td colspan='3'>Total Due</td><td>”+formatCurrency(inv.total)+”</td></tr></tbody></table>”,
+“<div class='status'>”+(inv.status===“paid”?“✓ Paid”:“Payment Due Upon Receipt”)+”</div></body></html>”
+].join(””);
+const win=window.open(””,”_blank”);win.document.write(html);win.document.close();win.focus();setTimeout(()=>win.print(),500);
+};
+
+const sendInvoice=inv=>{
+printInvoice(inv);
+setTimeout(()=>{
+const client=data.clients.find(c=>c.id===inv.clientId);
+const biz=data.businessName||“Empowerment Services”;
+const subj=encodeURIComponent(“Invoice “+inv.invoiceNumber+” from “+biz);
+const body=“Hi “+(client?.name||””)+”,\n\nPlease find invoice “+inv.invoiceNumber+” attached for “+formatCurrency(inv.total)+”.\n\nThank you,\n”+biz+(data.bizPhone?”\n”+data.bizPhone:””)+(data.bizEmail?”\n”+data.bizEmail:””);
+window.open(“mailto:”+(client?.email||””)+”?subject=”+subj+”&body=”+encodeURIComponent(body));
+},800);
+};
+
+return(
+<div>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:20}}>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”}}>Invoices</div>
+<div style={{display:“flex”,gap:8}}>
+<button className=“btn-secondary” style={{fontSize:13,position:“relative”}} onClick={()=>setShowRecurring(!showRecurring)}>
+🔄 Recurring
+{readyToGenerate.length>0&&<span style={{position:“absolute”,top:-6,right:-6,background:”#c8883a”,color:“white”,borderRadius:“50%”,width:16,height:16,fontSize:10,display:“flex”,alignItems:“center”,justifyContent:“center”,fontWeight:“bold”}}>{readyToGenerate.length}</span>}
+</button>
+{data.clients.length>0&&<button className=“btn-primary” onClick={()=>setShowCreate(true)}>+ Create Invoice</button>}
+</div>
+</div>
+
+```
+  {/* Recurring invoices panel */}
+  {showRecurring&&(
+    <div className="card" style={{marginBottom:20,borderColor:"#2d5a8e"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={{fontSize:15,fontWeight:"bold",color:"#c8f0dc"}}>Recurring Invoices</div>
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn-secondary" style={{fontSize:11,padding:"4px 10px",background:recurringTab==="list"?"#1e3040":"transparent"}} onClick={()=>setRecurringTab("list")}>List</button>
+          <button className="btn-secondary" style={{fontSize:11,padding:"4px 10px",background:recurringTab==="new"?"#1e3040":"transparent"}} onClick={()=>setRecurringTab("new")}>+ New</button>
+        </div>
+      </div>
+
+      {/* Ready to generate alert */}
+      {readyToGenerate.length>0&&recurringTab==="list"&&(
+        <div style={{background:"#1a3a2e",border:"1px solid #2d7a5e",borderRadius:8,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontSize:13,color:"#c8f0dc",marginBottom:8}}>
+            🔔 <strong>{readyToGenerate.length} invoice{readyToGenerate.length!==1?"s":""}</strong> ready to generate for {currentMonthLabel}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn-primary" style={{fontSize:13,padding:"8px 16px"}} onClick={generateAll}>Generate All ({formatCurrency(readyToGenerate.reduce((s,r)=>s+r.amount,0))})</button>
+          </div>
+        </div>
+      )}
+
+      {recurringTab==="list"&&(
+        recurringList.length===0?(
+          <div style={{textAlign:"center",color:"#4a7060",padding:20,fontSize:13}}>No recurring invoices yet. Tap + New to set one up.</div>
+        ):(
+          recurringList.map(r=>{
+            const client=data.clients.find(c=>c.id===r.clientId);
+            const isReady=r.active&&r.lastGenerated!==currentMonth;
+            return(
+              <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #1e3040"}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                    <div style={{fontSize:13,color:"#e8e0d4",fontWeight:"bold"}}>{client?.name}</div>
+                    {isReady&&<span style={{background:"#c8883a",color:"white",fontSize:10,padding:"1px 7px",borderRadius:50}}>DUE</span>}
+                    {!r.active&&<span style={{background:"#2a3d4f",color:"#7a9888",fontSize:10,padding:"1px 7px",borderRadius:50}}>PAUSED</span>}
+                  </div>
+                  <div style={{fontSize:12,color:"#4a7060"}}>{r.description} · {formatCurrency(r.amount)}/month · Due day {r.dayOfMonth}</div>
+                  {r.lastGenerated&&<div style={{fontSize:11,color:"#4a7060"}}>Last generated: {r.lastGenerated}</div>}
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  {isReady&&<button className="btn-primary" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>generateOne(r)}>Generate</button>}
+                  <button className="btn-secondary" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>toggleRecurring(r.id)}>{r.active?"Pause":"Resume"}</button>
+                  <button className="btn-danger" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>deleteRecurring(r.id)}>✕</button>
+                </div>
+              </div>
+            );
+          })
+        )
+      )}
+
+      {recurringTab==="new"&&(
+        <div style={{display:"grid",gap:12}}>
+          <div><div className="field-label">Client *</div>
+            <select className="field-select" value={rClientId} onChange={e=>setRClientId(e.target.value)}>
+              <option value="">Select client...</option>
+              {data.clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div><div className="field-label">Monthly Amount ($) *</div>
+            <input className="field-input" type="number" step="0.01" value={rAmount} onChange={e=>setRAmount(e.target.value)} placeholder="e.g. 500.00"/>
+          </div>
+          <div><div className="field-label">Invoice Description *</div>
+            <input className="field-input" value={rDescription} onChange={e=>setRDescription(e.target.value)} placeholder="e.g. Monthly IF Services"/>
+          </div>
+          <div><div className="field-label">Generate on Day of Month</div>
+            <select className="field-select" value={rDay} onChange={e=>setRDay(e.target.value)}>
+              {[1,15,28].map(d=><option key={d} value={d}>{d==="1"||d===1?"1st (beginning of month)":d===15?"15th (mid month)":"28th (end of month)"}</option>)}
+            </select>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <button className="btn-primary" onClick={addRecurring} disabled={!rClientId||!rAmount||!rDescription}>Save Recurring Invoice</button>
+            <button className="btn-secondary" onClick={()=>setRecurringTab("list")}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+  {unbilledByClient.filter(x=>x.total>0).length>0&&(
+    <div className="card" style={{borderColor:"#2d5a3e",marginBottom:20}}>
+      <div className="field-label" style={{marginBottom:10}}>Unbilled</div>
+      {unbilledByClient.filter(x=>x.total>0).map(({client,total})=>(
+        <div key={client.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #1e3040"}}>
+          <span style={{color:"#e8e0d4",fontSize:14}}>{client.name}</span>
+          <span style={{color:"#7eb8a4",fontWeight:"bold"}}>{formatCurrency(total)}</span>
+        </div>
+      ))}
+    </div>
+  )}
+  {(data.invoices||[]).length===0?<div className="card" style={{textAlign:"center",color:"#4a7060",padding:40}}>No invoices yet.</div>
+    :(data.invoices||[]).map(inv=>{
+      const client=data.clients.find(c=>c.id===inv.clientId);
+      return(
+        <div key={inv.id} className="card" style={{cursor:"pointer"}} onClick={()=>setViewInvoice(inv)}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{fontSize:14,fontWeight:"bold",color:"#c8f0dc"}}>{inv.invoiceNumber}</div>
+                {inv.isRecurring&&<span style={{background:"#1a3a5e",color:"#7ab8f0",fontSize:10,padding:"1px 7px",borderRadius:50,letterSpacing:"0.04em"}}>RECURRING</span>}
+              </div>
+              <div style={{fontSize:12,color:"#4a7060"}}>{client?.name} · {formatDate(inv.date)}{inv.isRecurring?" · "+inv.recurringDescription:""}</div>
+            </div>
+            <div style={{textAlign:"right"}}><div style={{fontSize:16,fontWeight:"bold",color:"#7eb8a4"}}>{formatCurrency(inv.total)}</div><div style={{fontSize:11,color:inv.status==="paid"?"#5db89a":"#c8883a",textTransform:"uppercase"}}>{inv.status}</div></div>
+          </div>
+        </div>
+      );
+    })}
+  {showCreate&&(
+    <div className="modal-overlay" onClick={()=>{setShowCreate(false);setAddedServices([]);}}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:17,fontWeight:"bold",color:"#c8f0dc",marginBottom:16}}>Create Invoice</div>
+        <div className="field-label">Client</div>
+        <select className="field-select" value={selectedClient} onChange={e=>{setSelectedClient(e.target.value);setAddedServices([]);}} style={{marginBottom:16}}>
+          <option value="">Choose client...</option>
+          {data.clients.map(c=>{const ub=unbilledByClient.find(x=>x.client.id===c.id);return<option key={c.id} value={c.id}>{c.name}{ub?.total?" — "+formatCurrency(ub.total)+" unbilled":""}</option>;})}
+        </select>
+        {selectedClient&&(
+          <>
+            {(sel?.entries?.length||0)>0&&(
+              <div style={{marginBottom:14}}>
+                <div className="field-label" style={{marginBottom:6}}>Hourly Time</div>
+                {sel.entries.map(e=><div key={e.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #1e3040",fontSize:13}}><span style={{color:"#a8c8b4",flex:1,marginRight:8}}>{e.task}</span><span style={{color:"#7eb8a4"}}>{formatDuration(e.duration)} · {formatCurrency((e.duration/60)*e.rate)}</span></div>)}
+              </div>
+            )}
+            {(sel?.expenses?.length||0)>0&&(
+              <div style={{marginBottom:14}}>
+                <div className="field-label" style={{marginBottom:6}}>Expenses</div>
+                {sel.expenses.map(e=><div key={e.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #1e3040",fontSize:13}}><span style={{color:"#a8c8b4",flex:1,marginRight:8}}>{e.description}{e.category?" ("+e.category+")":""}</span><span style={{color:"#7eb8a4"}}>{formatCurrency(e.amount)}</span></div>)}
+              </div>
+            )}
+            <div style={{marginBottom:14}}>
+              <div className="field-label" style={{marginBottom:8}}>Flat-Rate Services</div>
+              {allServices.map(sv=>{
+                const on=!!addedServices.find(s=>s.id===sv.id);
+                return<div key={sv.id} onClick={()=>toggleService(sv)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",marginBottom:6,borderRadius:7,cursor:"pointer",background:on?"#1a3a2e":"#1e3040",border:"1px solid "+(on?"#2d7a5e":"#2d4a5e")}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:18,height:18,borderRadius:4,border:"2px solid "+(on?"#7eb8a4":"#4a6a5a"),background:on?"#2d7a5e":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#c8f0dc"}}>{on?"✓":""}</div>
+                    <span style={{fontSize:13,color:"#e8e0d4"}}>{sv.name}</span>
+                  </div>
+                  <span style={{color:"#7eb8a4",fontWeight:"bold"}}>{formatCurrency(sv.amount)}</span>
+                </div>;
+              })}
+            </div>
+            <div className="total-bar"><span style={{color:"#c8f0dc"}}>Total</span><span style={{color:"#7eb8a4",fontSize:18,fontWeight:"bold"}}>{formatCurrency(grandTotal)}</span></div>
+          </>
+        )}
+        <div style={{display:"flex",gap:10,marginTop:16}}>
+          <button className="btn-primary" onClick={createInvoice} disabled={!selectedClient||grandTotal===0}>Generate Invoice</button>
+          <button className="btn-secondary" onClick={()=>{setShowCreate(false);setAddedServices([]);}}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )}
+  {viewInvoice&&(
+    <div className="modal-overlay" onClick={()=>setViewInvoice(null)}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16,paddingBottom:16,borderBottom:"1px solid #2a3d4f"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {data.logo&&<img src={data.logo} alt="Logo" style={{height:48,maxWidth:120,objectFit:"contain"}}/>}
+            <div>
+              <div style={{fontSize:15,fontWeight:"bold",color:"#c8f0dc"}}>{data.businessName||"Empowerment Services"}</div>
+              {data.address1&&<div style={{fontSize:11,color:"#4a7060"}}>{data.address1}</div>}
+              {data.address2&&<div style={{fontSize:11,color:"#4a7060"}}>{data.address2}</div>}
+              {data.bizPhone&&<div style={{fontSize:11,color:"#4a7060"}}>{data.bizPhone}</div>}
+              {data.bizEmail&&<div style={{fontSize:11,color:"#4a7060"}}>{data.bizEmail}</div>}
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:18,fontWeight:"bold",color:"#c8f0dc"}}>{viewInvoice.invoiceNumber}</div>
+            <div style={{fontSize:12,color:"#4a7060"}}>{formatDate(viewInvoice.date)}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+          {viewInvoice.status==="unpaid"&&<button className="btn-primary" style={{fontSize:12,padding:"6px 12px"}} onClick={()=>{updateData(prev=>({invoices:(prev.invoices||[]).map(i=>i.id===viewInvoice.id?{...i,status:"paid"}:i)}));setViewInvoice({...viewInvoice,status:"paid"});}}>✓ Mark Paid</button>}
+          <button className="btn-secondary" style={{fontSize:12,padding:"6px 12px"}} onClick={()=>printInvoice(viewInvoice)}>🖨 Save as PDF</button>
+          <button className="btn-secondary" style={{fontSize:12,padding:"6px 12px"}} onClick={()=>sendInvoice(viewInvoice)}>✉ Save PDF & Email</button>
+          <button className="btn-secondary" style={{fontSize:12,padding:"6px 12px"}} onClick={()=>setViewInvoice(null)}>Close</button>
+        </div>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"#4a7060",textTransform:"uppercase",letterSpacing:"0.08em"}}>Bill To</div>
+          <div style={{color:"#e8e0d4"}}>{data.clients.find(c=>c.id===viewInvoice.clientId)?.name}</div>
+        </div>
+        <table className="invoice-table">
+          <thead><tr><th>Task</th><th>Date</th><th>Hours</th><th>Amount</th></tr></thead>
+          <tbody>
+            {viewInvoice.isRecurring&&viewInvoice.recurringDescription&&(
+              <tr><td style={{color:"#a8c8b4"}}>{viewInvoice.recurringDescription}</td><td style={{color:"#7a9888"}}>{formatDate(viewInvoice.date)}</td><td style={{color:"#e8e0d4"}}>Monthly</td><td style={{color:"#7eb8a4"}}>{formatCurrency(viewInvoice.total)}</td></tr>
+            )}
+            {viewInvoice.entries.map(e=><tr key={e.id}><td style={{color:"#a8c8b4"}}>{e.task}</td><td style={{color:"#7a9888"}}>{formatDate(e.date)}</td><td style={{color:"#e8e0d4"}}>{formatDuration(e.duration)}</td><td style={{color:"#7eb8a4"}}>{formatCurrency((e.duration/60)*e.rate)}</td></tr>)}
+            {(viewInvoice.expenses||[]).map(e=><tr key={e.id}><td style={{color:"#a8c8b4"}}>{e.description}{e.category?" ("+e.category+")":""}</td><td style={{color:"#7a9888"}}>{formatDate(e.date)}</td><td style={{color:"#e8e0d4"}}>Expense</td><td style={{color:"#7eb8a4"}}>{formatCurrency(e.amount)}</td></tr>)}
+            {(viewInvoice.services||[]).map(s=><tr key={s.id}><td style={{color:"#a8c8b4"}}>{s.name}</td><td style={{color:"#7a9888"}}>Flat Rate</td><td style={{color:"#e8e0d4"}}>—</td><td style={{color:"#7eb8a4"}}>{formatCurrency(s.amount)}</td></tr>)}
+          </tbody>
+        </table>
+        <div className="total-bar" style={{marginTop:16}}>
+          <span style={{color:"#c8f0dc",fontWeight:"bold"}}>Total Due</span>
+          <span style={{color:"#7eb8a4",fontSize:20,fontWeight:"bold"}}>{formatCurrency(viewInvoice.total)}</span>
+        </div>
+        <div style={{marginTop:8,textAlign:"right",fontSize:12,color:viewInvoice.status==="paid"?"#5db89a":"#c8883a",textTransform:"uppercase"}}>{viewInvoice.status==="paid"?"✓ Paid":"Unpaid"}</div>
+      </div>
+    </div>
+  )}
+</div>
+```
+
+);
+}
+
+function TaxView({data,updateData}){
+const year=new Date().getFullYear();
+const seTaxRate=0.153;
+const seAdjustment=0.9235;
+const [stateTaxRate,setStateTaxRate]=useState(data.stateTaxRate||0.093);
+const [savedRate,setSavedRate]=useState(false);
+
+const saveRate=()=>{
+updateData(()=>({stateTaxRate:parseFloat(stateTaxRate)||0.093}));
+setSavedRate(true);setTimeout(()=>setSavedRate(false),2000);
+};
+
+// All invoiced/paid income this year
+const yearEntries=(data.entries||[]).filter(e=>e.date&&e.date.startsWith(year.toString()));
+const yearExpenses=(data.expenses||[]).filter(e=>e.date&&e.date.startsWith(year.toString()));
+const grossIncome=yearEntries.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+const totalExpenses=yearExpenses.reduce((s,e)=>s+e.amount,0);
+const netIncome=Math.max(0,grossIncome-totalExpenses);
+
+// SE tax calc: 15.3% of 92.35% of net
+const seTaxBase=netIncome*seAdjustment;
+const seTax=seTaxBase*seTaxRate;
+const seDeduction=seTax*0.5; // deduct half SE tax from income
+const taxableIncome=netIncome-seDeduction;
+const stateTax=taxableIncome*(parseFloat(stateTaxRate)||0);
+const totalTaxEstimate=seTax+stateTax;
+const setAsideRecommended=totalTaxEstimate;
+const quarterlyPayment=totalTaxEstimate/4;
+
+// Monthly breakdown
+const months=[“Jan”,“Feb”,“Mar”,“Apr”,“May”,“Jun”,“Jul”,“Aug”,“Sep”,“Oct”,“Nov”,“Dec”];
+const monthlyData=months.map((m,i)=>{
+const monthStr=year+”-”+(i+1).toString().padStart(2,“0”);
+const mEntries=(data.entries||[]).filter(e=>e.date&&e.date.startsWith(monthStr));
+const mExpenses=(data.expenses||[]).filter(e=>e.date&&e.date.startsWith(monthStr));
+const income=mEntries.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+const expenses=mExpenses.reduce((s,e)=>s+e.amount,0);
+return{month:m,income,expenses,net:Math.max(0,income-expenses)};
+});
+
+const maxMonthly=Math.max(…monthlyData.map(m=>m.income),1);
+
+// 2026 quarterly due dates
+const quarterlyDates=[
+{q:“Q1”,period:“Jan 1 – Mar 31”,due:“April 15, 2026”,month:3},
+{q:“Q2”,period:“Apr 1 – May 31”,due:“June 16, 2026”,month:5},
+{q:“Q3”,period:“Jun 1 – Aug 31”,due:“September 15, 2026”,month:8},
+{q:“Q4”,period:“Sep 1 – Dec 31”,due:“January 15, 2027”,month:0},
+];
+
+const currentMonth=new Date().getMonth();
+const nextDue=quarterlyDates.find(q=>q.month>=currentMonth)||quarterlyDates[0];
+
+return(
+<div>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:4}}>Tax Dashboard</div>
+<div style={{fontSize:13,color:”#4a7060”,marginBottom:20}}>{year} Tax Year</div>
+
+```
+  {/* Next quarterly payment alert */}
+  <div style={{background:"#1a3a2e",border:"1px solid #2d7a5e",borderRadius:10,padding:"14px 18px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+    <div>
+      <div style={{fontSize:11,color:"#4a7060",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:3}}>Next Quarterly Payment Due</div>
+      <div style={{fontSize:16,fontWeight:"bold",color:"#c8f0dc"}}>{nextDue.due}</div>
+      <div style={{fontSize:12,color:"#4a7060",marginTop:2}}>{nextDue.q} · {nextDue.period}</div>
+    </div>
+    <div style={{textAlign:"right"}}>
+      <div style={{fontSize:11,color:"#4a7060",textTransform:"uppercase",letterSpacing:"0.08em"}}>Est. Payment</div>
+      <div style={{fontSize:22,fontWeight:"bold",color:"#7eb8a4"}}>{formatCurrency(quarterlyPayment)}</div>
+    </div>
+  </div>
+
+  {/* Summary cards */}
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+    {[
+      {label:"Gross Income",value:formatCurrency(grossIncome),color:"#c8f0dc"},
+      {label:"Deductible Expenses",value:formatCurrency(totalExpenses),color:"#c8a87e"},
+      {label:"Net Income",value:formatCurrency(netIncome),color:"#c8f0dc"},
+      {label:"Set Aside Total",value:formatCurrency(setAsideRecommended),color:"#e87a7a"},
+    ].map(({label,value,color})=>(
+      <div key={label} style={{background:"#17232f",border:"1px solid #2a3d4f",borderRadius:10,padding:"14px 16px"}}>
+        <div style={{fontSize:10,color:"#4a7060",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>{label}</div>
+        <div style={{fontSize:20,fontWeight:"bold",color}}>{value}</div>
+      </div>
+    ))}
+  </div>
+
+  {/* Tax breakdown */}
+  <div className="card" style={{marginBottom:20}}>
+    <div style={{fontSize:14,fontWeight:"bold",color:"#c8f0dc",marginBottom:14}}>Tax Breakdown</div>
+    {[
+      {label:"Gross Income",value:grossIncome,note:""},
+      {label:"Business Expenses (deductible)",value:-totalExpenses,note:""},
+      {label:"Net Income",value:netIncome,note:"",bold:true},
+      {label:"SE Tax Base (net × 92.35%)",value:seTaxBase,note:"IRS adjustment"},
+      {label:"Federal SE Tax (15.3%)",value:seTax,note:"Social Security + Medicare"},
+      {label:"SE Tax Deduction (half of SE tax)",value:-seDeduction,note:"Reduces taxable income"},
+      {label:"Taxable Income after deduction",value:taxableIncome,note:"",bold:true},
+      {label:"CA State Income Tax ("+Math.round((parseFloat(stateTaxRate)||0)*100)+"%)",value:stateTax,note:"Adjust rate below"},
+      {label:"Total Estimated Tax",value:totalTaxEstimate,note:"",bold:true,highlight:true},
+    ].map(({label,value,note,bold,highlight})=>(
+      <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"8px 0",borderBottom:"1px solid #1e3040",background:highlight?"rgba(232,122,122,0.08)":"transparent",margin:highlight?"0 -20px":"0",padding:highlight?"8px 20px":"8px 0"}}>
+        <div>
+          <div style={{fontSize:13,color:bold?"#e8e0d4":"#a8c8b8",fontWeight:bold?"bold":"normal"}}>{label}</div>
+          {note&&<div style={{fontSize:11,color:"#4a7060"}}>{note}</div>}
+        </div>
+        <div style={{fontSize:14,fontWeight:bold?"bold":"normal",color:value<0?"#c8a87e":highlight?"#e87a7a":bold?"#c8f0dc":"#7eb8a4",flexShrink:0,marginLeft:12}}>
+          {value<0?"− "+formatCurrency(Math.abs(value)):formatCurrency(value)}
+        </div>
+      </div>
+    ))}
+  </div>
+
+  {/* State tax rate adjuster */}
+  <div className="card" style={{marginBottom:20}}>
+    <div style={{fontSize:14,fontWeight:"bold",color:"#c8f0dc",marginBottom:6}}>California State Income Tax Rate</div>
+    <div style={{fontSize:12,color:"#4a7060",marginBottom:12}}>CA rates range from 1% to 13.3% depending on income. Adjust to match your bracket.</div>
+    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+      <input className="field-input" type="number" step="0.1" min="0" max="15" value={Math.round((parseFloat(stateTaxRate)||0)*1000)/10} onChange={e=>setStateTaxRate(parseFloat(e.target.value)/100||0)} style={{maxWidth:100}} />
+      <span style={{color:"#7a9888",fontSize:14}}>%</span>
+      <button className="btn-primary" style={{fontSize:13,padding:"8px 16px"}} onClick={saveRate}>{savedRate?"✓ Saved":"Save Rate"}</button>
+    </div>
+    <div style={{fontSize:11,color:"#4a7060",marginTop:8}}>Common CA brackets: ~2% under $20k · ~6% at $50k · ~9.3% at $65k+ · 13.3% over $1M</div>
+  </div>
+
+  {/* Monthly bar chart */}
+  <div className="card" style={{marginBottom:20}}>
+    <div style={{fontSize:14,fontWeight:"bold",color:"#c8f0dc",marginBottom:16}}>{year} Monthly Income</div>
+    <div style={{display:"flex",alignItems:"flex-end",gap:6,height:120}}>
+      {monthlyData.map(({month,income,net})=>{
+        const h=income>0?Math.max(8,(income/maxMonthly)*100):4;
+        const isCurrent=months[new Date().getMonth()]===month;
+        return(
+          <div key={month} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+            <div style={{fontSize:9,color:"#4a7060"}}>{income>0?("$"+(income/1000).toFixed(0)+"k"):""}</div>
+            <div style={{width:"100%",height:h+"%",background:isCurrent?"#5db89a":"#2d7a5e",borderRadius:"4px 4px 0 0",minHeight:4,transition:"height 0.3s"}}/>
+            <div style={{fontSize:9,color:isCurrent?"#7eb8a4":"#4a7060",fontWeight:isCurrent?"bold":"normal"}}>{month}</div>
+          </div>
+        );
+      })}
+    </div>
+    <div style={{display:"flex",justifyContent:"space-between",marginTop:12,fontSize:12}}>
+      <span style={{color:"#4a7060"}}>Total Earned: <span style={{color:"#c8f0dc",fontWeight:"bold"}}>{formatCurrency(grossIncome)}</span></span>
+      <span style={{color:"#4a7060"}}>Monthly Avg: <span style={{color:"#7eb8a4",fontWeight:"bold"}}>{formatCurrency(grossIncome/12)}</span></span>
+    </div>
+  </div>
+
+  {/* Quarterly due dates */}
+  <div className="card">
+    <div style={{fontSize:14,fontWeight:"bold",color:"#c8f0dc",marginBottom:14}}>2026 Quarterly Payment Dates</div>
+    {quarterlyDates.map(({q,period,due,month})=>{
+      const isPast=month>0&&month<currentMonth;
+      const isNext=q===nextDue.q;
+      return(
+        <div key={q} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid #1e3040",opacity:isPast?.5:1}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:13,fontWeight:"bold",color:isNext?"#c8f0dc":"#a8c8b8"}}>{q}</span>
+              {isNext&&<span style={{background:"#2d7a5e",color:"#c8f0dc",fontSize:10,padding:"2px 8px",borderRadius:50,letterSpacing:"0.06em"}}>NEXT DUE</span>}
+              {isPast&&<span style={{color:"#4a7060",fontSize:11}}>✓</span>}
+            </div>
+            <div style={{fontSize:11,color:"#4a7060",marginTop:2}}>{period}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:13,color:isNext?"#7eb8a4":"#7a9888",fontWeight:isNext?"bold":"normal"}}>{formatCurrency(quarterlyPayment)}</div>
+            <div style={{fontSize:11,color:"#4a7060"}}>{due}</div>
+          </div>
+        </div>
+      );
+    })}
+    <div style={{fontSize:11,color:"#4a7060",marginTop:12,lineHeight:1.6}}>
+      Pay federal taxes at <span style={{color:"#7eb8a4"}}>irs.gov/payments</span> · Pay CA state taxes at <span style={{color:"#7eb8a4"}}>ftb.ca.gov</span>
+    </div>
+  </div>
+</div>
+```
+
+);
+}
+
+function ReportsView({data}){
+const[period,setPeriod]=useState(“monthly”);
+const[filterClient,setFilterClient]=useState(“all”);
+const getKey=d=>period===“weekly”?(()=>{const dt=new Date(d+“T12:00:00”),day=dt.getDay(),diff=dt.getDate()-day+(day===0?-6:1);return new Date(new Date(d+“T12:00:00”).setDate(diff)).toISOString().split(“T”)[0];})():d.slice(0,7);
+const fmtLabel=key=>period===“weekly”?(()=>{const s=new Date(key+“T12:00:00”),e=new Date(s);e.setDate(e.getDate()+6);return s.toLocaleDateString(“en-US”,{month:“short”,day:“numeric”})+” – “+e.toLocaleDateString(“en-US”,{month:“short”,day:“numeric”,year:“numeric”});})():new Date(key.split(”-”)[0],parseInt(key.split(”-”)[1])-1,1).toLocaleDateString(“en-US”,{month:“long”,year:“numeric”});
+const entries=(data.entries||[]).filter(e=>filterClient===“all”||e.clientId===filterClient);
+const allExpenses=(data.expenses||[]);
+const allKeys=[…new Set(entries.map(e=>getKey(e.date)))].sort((a,b)=>b.localeCompare(a));
+const periodData=allKeys.map(key=>{
+const pe=entries.filter(e=>getKey(e.date)===key);
+const breakdown=data.clients.map(c=>{
+const ce=pe.filter(e=>e.clientId===c.id);
+const mins=ce.reduce((s,e)=>s+e.duration,0),ta=ce.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+if(mins===0)return null;
+return{client:c,mins,ta,xa:0,total:ta};
+}).filter(Boolean);
+const tm=pe.reduce((s,e)=>s+e.duration,0),tt=pe.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+return{key,label:fmtLabel(key),breakdown,totalMins:tm,totalTime:tt,totalExp:0,total:tt};
+});
+const grandMins=entries.reduce((s,e)=>s+e.duration,0);
+const grandTime=entries.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+const grandExp=allExpenses.reduce((s,e)=>s+e.amount,0);
+const clientTotals=data.clients.map(c=>{
+const ce=entries.filter(e=>e.clientId===c.id);
+const mins=ce.reduce((s,e)=>s+e.duration,0),ta=ce.reduce((s,e)=>s+(e.duration/60)*e.rate,0);
+if(mins===0)return null;
+return{client:c,mins,ta,xa:0,total:ta};
+}).filter(Boolean).sort((a,b)=>b.total-a.total);
+
+return(
+<div>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:20,flexWrap:“wrap”,gap:10}}>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”}}>Reports</div>
+<div style={{display:“flex”,gap:8}}>
+<div style={{background:”#17232f”,border:“1px solid #2a3d4f”,borderRadius:8,padding:3,display:“flex”}}>
+{[“weekly”,“monthly”].map(p=><button key={p} onClick={()=>setPeriod(p)} style={{padding:“6px 14px”,borderRadius:6,border:“none”,fontSize:12,cursor:“pointer”,textTransform:“capitalize”,background:period===p?”#2d7a5e”:“transparent”,color:period===p?”#c8f0dc”:”#4a7060”}}>{p}</button>)}
+</div>
+<select className=“field-select” style={{width:“auto”}} value={filterClient} onChange={e=>setFilterClient(e.target.value)}>
+<option value="all">All Clients</option>
+{data.clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+</select>
+</div>
+</div>
+<div style={{display:“grid”,gridTemplateColumns:“1fr 1fr 1fr”,gap:10,marginBottom:24}}>
+{[[“Total Hours”,formatDuration(grandMins),”#c8f0dc”],[“Time Billed”,formatCurrency(grandTime),”#7eb8a4”],[“Expenses”,formatCurrency(grandExp),”#c8a87e”]].map(([l,v,c])=>(
+<div key={l} style={{background:”#17232f”,border:“1px solid #2a3d4f”,borderRadius:10,padding:“14px 16px”}}>
+<div style={{fontSize:10,color:”#4a7060”,letterSpacing:“0.1em”,textTransform:“uppercase”,marginBottom:4}}>{l}</div>
+<div style={{fontSize:20,fontWeight:“bold”,color:c}}>{v}</div>
+</div>
+))}
+</div>
+{clientTotals.length>0&&(
+<div className="card" style={{marginBottom:24}}>
+<div style={{fontSize:13,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:12}}>Client Summary</div>
+<table style={{width:“100%”,borderCollapse:“collapse”}}>
+<thead><tr>{[“Client”,“Hours”,“Time Billed”,“Expenses”,“Total”].map(h=><th key={h} style={{textAlign:h===“Client”?“left”:“right”,padding:“6px 8px”,fontSize:10,letterSpacing:“0.08em”,textTransform:“uppercase”,color:”#4a7060”,borderBottom:“1px solid #1e3040”}}>{h}</th>)}</tr></thead>
+<tbody>{clientTotals.map(({client,mins,ta,xa,total})=>(
+<tr key={client.id}>
+<td style={{padding:“9px 8px”,fontSize:13,color:”#e8e0d4”,borderBottom:“1px solid #1a2d3a”}}>{client.name}</td>
+<td style={{padding:“9px 8px”,fontSize:13,color:”#c8f0dc”,textAlign:“right”,borderBottom:“1px solid #1a2d3a”}}>{formatDuration(mins)}</td>
+<td style={{padding:“9px 8px”,fontSize:13,color:”#7eb8a4”,textAlign:“right”,borderBottom:“1px solid #1a2d3a”}}>{formatCurrency(ta)}</td>
+<td style={{padding:“9px 8px”,fontSize:13,color:”#c8a87e”,textAlign:“right”,borderBottom:“1px solid #1a2d3a”}}>{formatCurrency(xa)}</td>
+<td style={{padding:“9px 8px”,fontSize:14,color:”#c8f0dc”,fontWeight:“bold”,textAlign:“right”,borderBottom:“1px solid #1a2d3a”}}>{formatCurrency(total)}</td>
+</tr>
+))}</tbody>
+</table>
+</div>
+)}
+{periodData.length===0?<div className=“card” style={{textAlign:“center”,color:”#4a7060”,padding:40}}>No data yet. Log time entries to see reports.</div>
+:periodData.map(({key,label,breakdown,totalMins,totalTime,totalExp,total})=>(
+<div key={key} className="card" style={{marginBottom:14}}>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“flex-start”,marginBottom:12,paddingBottom:10,borderBottom:“1px solid #1e3040”}}>
+<div style={{fontSize:14,fontWeight:“bold”,color:”#c8f0dc”}}>{label}</div>
+<div style={{textAlign:“right”}}><div style={{fontSize:13,color:”#7eb8a4”,fontWeight:“bold”}}>{formatCurrency(total)}</div><div style={{fontSize:11,color:”#4a7060”}}>{formatDuration(totalMins)}{totalExp>0?” + “+formatCurrency(totalExp)+” exp”:””}</div></div>
+</div>
+{breakdown.map(({client,mins,ta,xa,total:ct})=>(
+<div key={client.id} style={{marginBottom:10}}>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:4}}>
+<div style={{fontSize:13,color:”#e8e0d4”}}>{client.name}</div>
+<div style={{display:“flex”,gap:12,fontSize:12}}>
+<span style={{color:”#7a9888”}}>{formatDuration(mins)}</span>
+<span style={{color:”#7eb8a4”}}>{formatCurrency(ta)}</span>
+{xa>0&&<span style={{color:”#c8a87e”}}>+{formatCurrency(xa)}</span>}
+<span style={{color:”#c8f0dc”,fontWeight:“bold”}}>{formatCurrency(ct)}</span>
+</div>
+</div>
+<div style={{background:”#0f1923”,borderRadius:3,height:3,overflow:“hidden”}}>
+<div style={{width:Math.min(100,(mins/(totalMins||1))*100)+”%”,height:“100%”,background:”#2d7a5e”,borderRadius:3}}/>
+</div>
+</div>
+))}
+</div>
+))}
+</div>
+);
+}
+
+function TasksView({data,updateData}){
+const tasks=data.customTasks||IF_TASKS;
+const[editingIdx,setEditingIdx]=useState(null);
+const[editValue,setEditValue]=useState(””);
+const[newTask,setNewTask]=useState(””);
+const[search,setSearch]=useState(””);
+const[confirmReset,setConfirmReset]=useState(false);
+const save=updated=>updateData(()=>({customTasks:updated}));
+const filtered=tasks.map((t,i)=>({t,i})).filter(({t})=>t.toLowerCase().includes(search.toLowerCase()));
+return(
+<div>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:8}}>
+<div><div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”}}>Tasks</div><div style={{fontSize:12,color:”#4a7060”,marginTop:2}}>{tasks.length} tasks · shown in every time entry</div></div>
+{data.customTasks&&<button className=“btn-secondary” style={{fontSize:12}} onClick={()=>setConfirmReset(true)}>Reset to Defaults</button>}
+</div>
+{confirmReset&&(
+<div className=“card” style={{borderColor:”#7a3030”,marginBottom:16}}>
+<div style={{fontSize:13,color:”#e8c8c8”,marginBottom:10}}>Reset to original 49 IF tasks? All edits will be lost.</div>
+<div style={{display:“flex”,gap:8}}><button className=“btn-danger” onClick={()=>{updateData(()=>({customTasks:null}));setConfirmReset(false);}}>Yes, Reset</button><button className=“btn-secondary” onClick={()=>setConfirmReset(false)}>Cancel</button></div>
+</div>
+)}
+<div className=“card” style={{marginBottom:16,borderColor:”#2d5a3e”}}>
+<div className="field-label" style={{marginBottom:8}}>Add New Task</div>
+<div style={{display:“flex”,gap:8}}>
+<input className=“field-input” value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key===“Enter”&&newTask.trim()&&(save([…tasks,newTask.trim()]),setNewTask(””))} placeholder=“Task name…”/>
+<button className=“btn-primary” style={{whiteSpace:“nowrap”}} onClick={()=>{if(newTask.trim()){save([…tasks,newTask.trim()]);setNewTask(””);}}} disabled={!newTask.trim()}>+ Add</button>
+</div>
+</div>
+<input className=“field-input” value={search} onChange={e=>setSearch(e.target.value)} placeholder=“Search tasks…” style={{marginBottom:12}}/>
+<div className=“card” style={{padding:0,overflow:“hidden”}}>
+{filtered.length===0?<div style={{padding:24,textAlign:“center”,color:”#4a7060”}}>No tasks match.</div>
+:filtered.map(({t,i})=>(
+<div key={i} style={{borderBottom:“1px solid #1a2d3a”}}>
+{editingIdx===i?(
+<div style={{display:“flex”,gap:8,padding:“10px 14px”,alignItems:“center”}}>
+<input className=“field-input” value={editValue} onChange={e=>setEditValue(e.target.value)} onKeyDown={e=>{if(e.key===“Enter”&&editValue.trim()){save(tasks.map((t2,idx)=>idx===i?editValue.trim():t2));setEditingIdx(null);}if(e.key===“Escape”)setEditingIdx(null);}} autoFocus/>
+<button className=“btn-primary” style={{whiteSpace:“nowrap”,fontSize:12,padding:“8px 14px”}} onClick={()=>{if(editValue.trim()){save(tasks.map((t2,idx)=>idx===i?editValue.trim():t2));setEditingIdx(null);}}}>Save</button>
+<button className=“btn-secondary” style={{whiteSpace:“nowrap”,fontSize:12,padding:“8px 14px”}} onClick={()=>setEditingIdx(null)}>Cancel</button>
+</div>
+):(
+<div style={{display:“flex”,alignItems:“center”,padding:“11px 14px”,gap:10}}>
+<div style={{flex:1,fontSize:13,color:”#e8e0d4”}}>{t}</div>
+<button className=“btn-secondary” style={{fontSize:11,padding:“4px 10px”,flexShrink:0}} onClick={()=>{setEditingIdx(i);setEditValue(t);}}>Edit</button>
+<button className=“btn-danger” style={{fontSize:11,padding:“4px 8px”,flexShrink:0}} onClick={()=>save(tasks.filter((_,idx)=>idx!==i))}>✕</button>
+</div>
+)}
+</div>
+))}
+</div>
+</div>
+);
+}
+
+function SettingsView({data,updateData}){
+const[rate,setRate]=useState(data.hourlyRate);
+const[businessName,setBusinessName]=useState(data.businessName||“Empowerment Services”);
+const[address1,setAddress1]=useState(data.address1||””);
+const[address2,setAddress2]=useState(data.address2||””);
+const[bizPhone,setBizPhone]=useState(data.bizPhone||””);
+const[bizEmail,setBizEmail]=useState(data.bizEmail||””);
+const[logo,setLogo]=useState(data.logo||””);
+const[saved,setSaved]=useState(false);
+const handleLogo=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setLogo(ev.target.result);r.readAsDataURL(f);};
+const save=()=>{updateData(()=>({hourlyRate:parseFloat(rate)||75,businessName,address1,address2,bizPhone,bizEmail,logo}));setSaved(true);setTimeout(()=>setSaved(false),2000);};
+return(
+<div>
+<div style={{fontSize:22,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:20}}>Settings</div>
+<div className="card">
+<div style={{fontSize:14,fontWeight:“bold”,color:”#c8f0dc”,marginBottom:14}}>Business Information</div>
+<div style={{display:“grid”,gap:14}}>
+<div>
+<div className="field-label">Business Logo</div>
+<div style={{display:“flex”,alignItems:“center”,gap:14,marginTop:6}}>
+{logo?<img src={logo} alt=“Logo” style={{height:56,maxWidth:160,objectFit:“contain”,borderRadius:6,background:”#1e3040”,padding:4}}/>:<div style={{width:80,height:56,background:”#1e3040”,border:“1px dashed #2d4a5e”,borderRadius:6,display:“flex”,alignItems:“center”,justifyContent:“center”,color:”#4a7060”,fontSize:11}}>No logo</div>}
+<div>
+<label style={{cursor:“pointer”}}><span className=“btn-secondary” style={{display:“inline-block”,fontSize:12}}>Upload Logo</span><input type=“file” accept=“image/*” onChange={handleLogo} style={{display:“none”}}/></label>
+{logo&&<button className=“btn-danger” style={{marginLeft:8,fontSize:11}} onClick={()=>setLogo(””)}>Remove</button>}
+</div>
+</div>
+</div>
+<div><div className="field-label">Business Name</div><input className=“field-input” value={businessName} onChange={e=>setBusinessName(e.target.value)}/></div>
+<div><div className="field-label">Address Line 1</div><input className=“field-input” value={address1} onChange={e=>setAddress1(e.target.value)} placeholder=“Street address”/></div>
+<div><div className="field-label">Address Line 2 (City, State, ZIP)</div><input className=“field-input” value={address2} onChange={e=>setAddress2(e.target.value)} placeholder=“Arcata, CA 95521”/></div>
+<div style={{display:“grid”,gridTemplateColumns:“1fr 1fr”,gap:12}}>
+<div><div className="field-label">Phone</div><input className=“field-input” value={bizPhone} onChange={e=>setBizPhone(e.target.value)} placeholder=”(707) 555-0000”/></div>
+<div><div className="field-label">Email</div><input className=“field-input” value={bizEmail} onChange={e=>setBizEmail(e.target.value)} placeholder=“Empowermentif@gmail.com”/></div>
+</div>
+<div><div className="field-label">Default Hourly Rate ($)</div><input className=“field-input” type=“number” value={rate} onChange={e=>setRate(e.target.value)}/></div>
+<button className="btn-primary" onClick={save}>{saved?“✓ Saved!”:“Save Settings”}</button>
+</div>
+</div>
+</div>
+);
+}
+
+ReactDOM.createRoot(document.getElementById(“root”)).render(<App/>);
+</script>
+
+</body>
+</html>
