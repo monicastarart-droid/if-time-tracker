@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IF Time Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Georgia,serif;background:#0f1923;color:#e8e0d4;min-height:100vh;}
+input,select,textarea,button{font-family:Georgia,serif;}
+.hidden{display:none!important;}
+.card{background:#17232f;border:1px solid #2a3d4f;border-radius:10px;padding:20px;margin-bottom:16px;}
+.btn-primary{background:#2d7a5e;color:#e8f5ee;border:none;padding:10px 20px;border-radius:6px;font-size:14px;cursor:pointer;}
+.btn-primary:hover{background:#3a9470;}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.btn-secondary{background:#1e3040;color:#a8c8b8;border:1px solid #2d4a3e;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;}
+.btn-danger{background:#4a2020;color:#e8b4b4;border:1px solid #7a3030;padding:6px 12px;border-radius:5px;font-size:12px;cursor:pointer;}
+.field-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#7a9888;margin-bottom:5px;}
+.field-input{background:#1e3040;border:1px solid #2d4a5e;border-radius:6px;color:#e8e0d4;padding:9px 12px;width:100%;font-size:14px;outline:none;}
+.field-input:focus{border-color:#7eb8a4;}
+.field-select{background:#1e3040;border:1px solid #2d4a5e;border-radius:6px;color:#e8e0d4;padding:9px 12px;width:100%;font-size:14px;outline:none;}
+.nav-btn{background:none;border:none;padding:8px 11px;color:#7eb8a4;font-size:12px;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;}
+.nav-btn.active{color:#c8f0dc;border-bottom:2px solid #7eb8a4;}
+.inc-btn{background:#1e3040;color:#7eb8a4;border:1px solid #2d4a6a;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:bold;cursor:pointer;}
+.section-title{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#4a7060;margin:20px 0 10px;border-bottom:1px solid #1e3040;padding-bottom:6px;}
+.entry-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #1e3040;}
+.total-bar{background:#1a3a2e;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:10px;}
+.badge{background:#1a3a2e;color:#7eb8a4;border-radius:12px;padding:3px 10px;font-size:11px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+.modal{background:#17232f;border:1px solid #2a3d4f;border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;}
+</style>
+</head>
+<body>
+
+<div id="auth-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#17232f;border:1px solid #2a3d4f;border-radius:16px;padding:40px;width:100%;max-width:400px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:32px;justify-content:center;">
+      <div style="width:42px;height:42px;background:linear-gradient(135deg,#2d7a5e,#5db89a);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;color:white;">&#8982;</div>
+      <span style="font-size:18px;font-weight:bold;color:#c8f0dc;">IF Time Tracker</span>
+    </div>
+    <div id="auth-title" style="font-size:22px;font-weight:bold;color:#ffffff;margin-bottom:6px;text-align:center;">Welcome back</div>
+    <div id="auth-sub" style="font-size:13px;color:#4a7060;text-align:center;margin-bottom:28px;">Sign in to IF Time Tracker</div>
+    <div id="auth-error" class="hidden" style="background:#3a1010;border:1px solid #7a3030;border-radius:8px;padding:10px 14px;color:#f0a0a0;font-size:13px;margin-bottom:14px;"></div>
+    <div id="auth-confirm" class="hidden" style="background:#1a3a2e;border:1px solid #2d7a5e;border-radius:8px;padding:20px;text-align:center;color:#7eb8a4;font-size:14px;line-height:1.6;">
+      <div style="font-size:32px;margin-bottom:12px;">&#9993;</div>
+      Check your email to confirm your account, then come back to sign in.
+    </div>
+    <div id="auth-form">
+      <div class="field-label">Email</div>
+      <input id="auth-email" class="field-input" type="email" placeholder="your@email.com" style="margin-bottom:14px;">
+      <div class="field-label">Password</div>
+      <input id="auth-password" class="field-input" type="password" placeholder="password" style="margin-bottom:14px;">
+      <button id="auth-btn" class="btn-primary" style="width:100%;padding:14px;border-radius:8px;font-size:15px;margin-bottom:12px;">Sign In</button>
+      <button id="auth-toggle" style="background:none;border:none;color:#7eb8a4;font-size:13px;cursor:pointer;width:100%;text-align:center;">Don't have an account? Sign up free</button>
+    </div>
+  </div>
+</div>
+
+<div id="app-screen" class="hidden">
+  <div style="background:#0d1820;border-bottom:1px solid #1e3040;padding:0 20px;">
+    <div style="max-width:760px;margin:0 auto;">
+      <div style="padding:14px 0 0;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:28px;height:28px;background:linear-gradient(135deg,#2d7a5e,#5db89a);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;color:white;">&#8982;</div>
+          <span style="font-size:15px;font-weight:bold;color:#c8f0dc;">Empowerment Services</span>
+          <span style="font-size:11px;color:#4a7060;margin-left:4px;letter-spacing:.06em;">IF TIME TRACKER</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="user-email-display" style="font-size:11px;color:#4a7060;"></span>
+          <button id="signout-btn" class="btn-secondary" style="font-size:11px;padding:4px 10px;">Sign Out</button>
+        </div>
+      </div>
+      <nav style="display:flex;align-items:center;flex-wrap:wrap;gap:0;margin-top:4px;">
+        <button class="nav-btn active" onclick="showView('timer')">&#9201; Time Entry</button>
+        <button class="nav-btn" onclick="showView('timesheets')">&#128203; Timesheets</button>
+        <button class="nav-btn" onclick="showView('expenses')">&#128179; Expenses</button>
+        <button class="nav-btn" onclick="showView('clients')">&#128100; Clients</button>
+        <button class="nav-btn" onclick="showView('invoices')">&#128196; Invoices</button>
+        <div style="position:relative;">
+          <button class="nav-btn" id="more-btn" onclick="toggleMore()">More &#9660;</button>
+          <div id="more-menu" class="hidden" style="position:absolute;top:100%;left:0;background:#17232f;border:1px solid #2a3d4f;border-radius:8px;min-width:140px;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.4);overflow:hidden;">
+            <button onclick="showView('reports');toggleMore();" style="display:block;width:100%;text-align:left;padding:12px 16px;background:transparent;border:none;color:#a8c8b8;font-size:13px;cursor:pointer;border-bottom:1px solid #1e3040;font-family:Georgia,serif;">&#128202; Reports</button>
+            <button onclick="showView('tax');toggleMore();" style="display:block;width:100%;text-align:left;padding:12px 16px;background:transparent;border:none;color:#a8c8b8;font-size:13px;cursor:pointer;border-bottom:1px solid #1e3040;font-family:Georgia,serif;">&#128176; Tax</button>
+            <button onclick="showView('tasks');toggleMore();" style="display:block;width:100%;text-align:left;padding:12px 16px;background:transparent;border:none;color:#a8c8b8;font-size:13px;cursor:pointer;border-bottom:1px solid #1e3040;font-family:Georgia,serif;">&#9999; Tasks</button>
+            <button onclick="showView('settings');toggleMore();" style="display:block;width:100%;text-align:left;padding:12px 16px;background:transparent;border:none;color:#a8c8b8;font-size:13px;cursor:pointer;font-family:Georgia,serif;">&#9881; Settings</button>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </div>
+  <div style="max-width:760px;margin:0 auto;padding:24px 20px;">
+    <div id="view-timer"></div>
+    <div id="view-timesheets" class="hidden"></div>
+    <div id="view-expenses" class="hidden"></div>
+    <div id="view-clients" class="hidden"></div>
+    <div id="view-invoices" class="hidden"></div>
+    <div id="view-reports" class="hidden"></div>
+    <div id="view-tax" class="hidden"></div>
+    <div id="view-tasks" class="hidden"></div>
+    <div id="view-settings" class="hidden"></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ifbmjahpaemywlzxngju.supabase.co";
+const SUPABASE_KEY = "sb_publishable_1Hahl9864dvmqSHohTNa_Q_SPu38eVY";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Claude preview mode - bypass Supabase auth and use localStorage
+const IS_CLAUDE = true; // Always use preview mode in artifact
+
+if(IS_CLAUDE) {
+  console.log("Running in preview mode");
+}
+
+const IF_TASKS = [
+  "Budget - review 12-month expenditure report","Budget - Review proposed - IF","Budget - review proposed budget w/client",
+  "Client - Invoicing","Client Onboarding (Initial intro call & emails)","Client Onboarding (service agreement, RC authorization, admin set-up)",
+  "Coaching - budgeting, tracking monthly expenditures, managing SDP funds","Coaching - coordinating how SDP services are provided",
+  "Coaching - Education about generic sources of funding","Coaching - on how SDP transition works & timeline",
+  "Communication w/client or SDP Team - email, text, phone","FMS - Call or email","FMS - educating/coaching client",
+  "FMS - Onboarding support (paperwork, meetings, questions, admin)","FMS - Purchase Request","FMS - Review monthly financials",
+  "FMS - support procuring","FMS - Vendor Invoicing","Individual Program Planning - IPP support or meeting attendance",
+  "Meeting - Office or Zoom","PCP - coaching/educating before PCP meeting","PCP - delivery of final doc to SDP Team",
+  "PCP - development","PCP - edit, organize photos","PCP - final edits w/Circle of Support",
+  "PCP - meeting facilitation w/circle of support","PCP - prep form","PCP - Scheduling/create zoom","PCP - yearly update",
+  "Project Management","Renewals - SDP Fiscal Year Renewals","Review - client documents","Schedule - development",
+  "Social Rec Supports - research & creation","Spending Plan - coaching and education","Spending Plan - development",
+  "Spending Plan - review & finalize w/client","Spending Plan - revisions","Staff - coaching client on onboarding & training",
+  "Staff - educating staff on SDP","Staff - FMS Onboarding","Staff - support finding/procuring",
+  "Support - Administrative tasks","Support - advocating for unmet needs and services","Support - Client Advocating",
+  "Support - finding resources/vendors to meet needs","Vendor - Communication - email, text, phone",
+  "Vendor(s) - FMS Onboarding","Vendor(s) - Invoicing"
+];
+
+const EXPENSE_CATS = ["Mileage","Printing & Copying","Postage & Shipping","Phone & Internet","Supplies","Software & Subscriptions","Travel","Meals","Other"];
+
+let appData = {
+  clients:[],projects:[],entries:[],expenses:[],invoices:[],recurringInvoices:[],
+  hourlyRate:75,customTasks:null,customExpenseCategories:[],
+  businessName:"Empowerment Services",address1:"",address2:"",bizPhone:"",bizEmail:"",logo:"",stateTaxRate:0.093
+};
+let currentUser = null;
+let saveTimer = null;
+let authMode = "login";
+
+function $(id){return document.getElementById(id);}
+function today(){return new Date().toISOString().split("T")[0];}
+function fmtDate(d){return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}
+function fmtDur(m){if(!m)return"0:00";return Math.floor(m/60)+":"+(m%60).toString().padStart(2,"0");}
+function fmtCur(n){return"$"+(n||0).toFixed(2);}
+function tasks(){return appData.customTasks||IF_TASKS;}
+
+async function loadData(){
+  if(IS_CLAUDE){
+    var stored = localStorage.getItem("if_tracker_data");
+    if(stored) appData = {...appData,...JSON.parse(stored)};
+    return;
+  }
+  const {data:rows} = await sb.from("user_data").select("data").eq("user_id",currentUser.id).single();
+  if(rows && rows.data) appData = {...appData,...rows.data};
+}
+
+async function saveData(){
+  if(IS_CLAUDE){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function(){
+      localStorage.setItem("if_tracker_data", JSON.stringify(appData));
+    },500);
+    return;
+  }
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async()=>{
+    await sb.from("user_data").upsert({user_id:currentUser.id,data:appData},{onConflict:"user_id"});
+  },1000);
+}
+
+function updateData(updates){
+  Object.assign(appData,updates);
+  saveData();
+  renderCurrentView();
+}
+
+let currentView = "timer";
+function showView(v){
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll("[id^='view-']").forEach(el=>el.classList.add("hidden"));
+  currentView = v;
+  var el = $("view-"+v);
+  if(el){el.classList.remove("hidden");renderView(v);}
+  document.querySelectorAll(".nav-btn").forEach(b=>{
+    if(b.getAttribute("onclick") && b.getAttribute("onclick").includes("'"+v+"'")) b.classList.add("active");
+  });
+}
+
+function renderCurrentView(){renderView(currentView);}
+
+function renderView(v){
+  var el = $("view-"+v);
+  if(!el)return;
+  if(v==="timer")el.innerHTML=renderTimer();
+  else if(v==="timesheets")el.innerHTML=renderTimesheets();
+  else if(v==="expenses")el.innerHTML=renderExpenses();
+  else if(v==="clients")el.innerHTML=renderClients();
+  else if(v==="invoices")el.innerHTML=renderInvoices();
+  else if(v==="reports")el.innerHTML=renderReports();
+  else if(v==="tax")el.innerHTML=renderTax();
+  else if(v==="tasks")el.innerHTML=renderTasks();
+  else if(v==="settings")el.innerHTML=renderSettings();
+}
+
+function toggleMore(){$("more-menu").classList.toggle("hidden");}
+document.addEventListener("click",function(e){
+  if(!$("more-btn").contains(e.target)&&!$("more-menu").contains(e.target)){
+    $("more-menu").classList.add("hidden");
+  }
+});
+
+// AUTH
+let isLogin = true;
+$("auth-toggle").onclick = function(){
+  isLogin = !isLogin;
+  $("auth-title").textContent = isLogin ? "Welcome back" : "Create your account";
+  $("auth-sub").textContent = isLogin ? "Sign in to IF Time Tracker" : "Start your 14-day free trial";
+  $("auth-btn").textContent = isLogin ? "Sign In" : "Create Account";
+  $("auth-toggle").textContent = isLogin ? "Don't have an account? Sign up free" : "Already have an account? Sign in";
+  $("auth-error").classList.add("hidden");
+};
+
+$("auth-password").addEventListener("keydown",function(e){if(e.key==="Enter")$("auth-btn").click();});
+
+$("auth-btn").onclick = async function(){
+  var email = $("auth-email").value;
+  var password = $("auth-password").value;
+  if(IS_CLAUDE){
+    currentUser = {id:"preview-user",email:email||"preview@iftimetracker.com"};
+    await loadData();
+    showApp();
+    return;
+  }
+  $("auth-error").classList.add("hidden");
+  $("auth-btn").disabled = true;
+  $("auth-btn").textContent = "Please wait...";
+  var result;
+  if(isLogin){
+    result = await sb.auth.signInWithPassword({email,password});
+  } else {
+    result = await sb.auth.signUp({email,password});
+  }
+  if(result.error){
+    $("auth-error").textContent = result.error.message;
+    $("auth-error").classList.remove("hidden");
+    $("auth-btn").disabled = false;
+    $("auth-btn").textContent = isLogin ? "Sign In" : "Create Account";
+  } else if(!isLogin && !result.data.session){
+    $("auth-form").classList.add("hidden");
+    $("auth-confirm").classList.remove("hidden");
+  } else {
+    currentUser = result.data.user;
+    await loadData();
+    showApp();
+  }
+};
+
+$("signout-btn").onclick = async function(){
+  await sb.auth.signOut();
+  currentUser = null;
+  appData = {clients:[],projects:[],entries:[],expenses:[],invoices:[],recurringInvoices:[],hourlyRate:75,customTasks:null,customExpenseCategories:[],businessName:"Empowerment Services",address1:"",address2:"",bizPhone:"",bizEmail:"",logo:"",stateTaxRate:0.093};
+  $("app-screen").classList.add("hidden");
+  $("auth-screen").classList.remove("hidden");
+};
+
+function showApp(){
+  $("auth-screen").classList.add("hidden");
+  $("app-screen").classList.remove("hidden");
+  $("user-email-display").textContent = currentUser.email;
+  showView("timer");
+}
+
+if(IS_CLAUDE){
+  currentUser = {id:"preview-user",email:"preview@iftimetracker.com"};
+  loadData().then(showApp);
+} else {
+  sb.auth.getSession().then(function(res){
+    if(res.data.session){
+      currentUser = res.data.session.user;
+      loadData().then(showApp);
+    }
+  });
+}
+
+// TIMER VIEW
+var timerDuration = 0;
+var timerMode = "manual";
+var timerRunning = false;
+var timerSeconds = 0;
+var timerInterval = null;
+var timerStart = null;
+
+function renderTimer(){
+  var clients = appData.clients;
+  var clientOpts = clients.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join("");
+  var taskOpts = tasks().map(function(t){return '<option value="'+escHtml(t)+'">'+escHtml(t)+'</option>';}).join("");
+  return '<div style="margin-bottom:20px;">'+
+    '<div style="font-size:24px;font-weight:bold;color:#ffffff;margin-bottom:12px;text-shadow:0 1px 4px rgba(0,0,0,0.5);">New Time Entry</div>'+
+    '<div style="display:flex;background:#17232f;border:1px solid #2a3d4f;border-radius:8px;padding:4px;gap:4px;">'+
+    '<button onclick="setTimerMode(\'manual\')" id="mode-manual" style="flex:1;padding:8px 0;border-radius:6px;border:none;font-size:13px;cursor:pointer;background:'+(timerMode==="manual"?"#2d7a5e":"transparent")+';color:'+(timerMode==="manual"?"#c8f0dc":"#4a7060")+';font-family:Georgia,serif;">Log Time</button>'+
+    '<button onclick="setTimerMode(\'timer\')" id="mode-timer" style="flex:1;padding:8px 0;border-radius:6px;border:none;font-size:13px;cursor:pointer;background:'+(timerMode==="timer"?"#2d7a5e":"transparent")+';color:'+(timerMode==="timer"?"#c8f0dc":"#4a7060")+';font-family:Georgia,serif;">Start Timer</button>'+
+    '</div></div>'+
+    '<div class="card"><div class="field-label">Client</div>'+
+    (clients.length===0?'<div style="color:#4a7060;font-size:13px;">No clients yet.</div>':
+    '<select class="field-select" id="t-client" onchange="updateProjectList()"><option value="">Select client...</option>'+clientOpts+'</select>')+
+    '</div>'+
+    '<div class="card" id="project-card" style="display:none;"><div class="field-label">Project</div>'+
+    '<select class="field-select" id="t-project" onchange="updateEffectiveRate()"><option value="">No project</option></select></div>'+
+    '<div class="card"><div class="field-label">Task</div>'+
+    '<input class="field-input" id="t-task-search" placeholder="Search tasks..." oninput="filterTasks()" style="margin-bottom:8px;">'+
+    '<select class="field-select" id="t-task" size="1"><option value="">Select a task...</option>'+taskOpts+'</select></div>'+
+    '<div class="card" id="duration-card">'+renderDurationCard()+
+    '</div>'+
+    '<div class="card">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'+
+    '<div><div class="field-label">Date</div><input type="date" class="field-input" id="t-date" value="'+today()+'"></div>'+
+    '<div><div class="field-label">Amount</div><div style="background:#1e3040;border:1px solid #2d4a5e;border-radius:6px;padding:9px 12px;color:#7eb8a4;font-size:14px;" id="t-amount">$0.00</div></div>'+
+    '</div>'+
+    '<div><div class="field-label">Notes (optional)</div><textarea class="field-input" id="t-notes" rows="2" placeholder="Add any notes..."></textarea></div>'+
+    '</div>'+
+    '<button class="btn-primary" onclick="saveEntry()" id="save-entry-btn" style="width:100%;padding:14px;font-size:15px;border-radius:8px;">Save Time Entry</button>'+
+    '<div id="saved-msg" style="text-align:center;color:#7eb8a4;padding:10px;display:none;">Entry Saved!</div>';
+}
+
+function renderDurationCard(){
+  if(timerMode==="manual"){
+    return '<div class="field-label">Duration</div>'+
+      '<div style="font-size:48px;font-weight:bold;color:#c8f0dc;letter-spacing:-1px;text-align:center;padding:10px;">'+fmtDur(timerDuration)+'</div>'+
+      '<div style="display:flex;justify-content:center;gap:10px;margin-top:12px;flex-wrap:wrap;">'+
+      '<button class="inc-btn" onclick="addTime(15)">+15m</button>'+
+      '<button class="inc-btn" onclick="addTime(30)">+30m</button>'+
+      '<button class="inc-btn" onclick="addTime(60)">+1h</button>'+
+      '<button class="inc-btn" onclick="addTime(480)">+8h</button>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:center;gap:10px;margin-top:8px;">'+
+      '<button class="btn-secondary" style="font-size:12px;" onclick="addTime(-15)">- 0:15</button>'+
+      '<button class="btn-secondary" style="font-size:12px;" onclick="clearTimer()">Clear</button>'+
+      '</div>';
+  } else {
+    var secs = timerSeconds;
+    var h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = secs%60;
+    var display = h+":"+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0");
+    return '<div class="field-label">Live Timer</div>'+
+      '<div style="font-size:44px;font-weight:bold;color:'+(timerRunning?"#5db89a":"#c8f0dc")+';letter-spacing:-1px;text-align:center;padding:10px;" id="timer-display">'+display+'</div>'+
+      (timerRunning?'<div style="text-align:center;margin-bottom:8px;font-size:11px;color:#5db89a;letter-spacing:.08em;text-transform:uppercase;">Running</div>':'')+
+      '<div style="display:flex;justify-content:center;gap:10px;margin-top:8px;">'+
+      (!timerRunning?'<button class="btn-primary" onclick="startTimer()" style="padding:10px 32px;font-size:15px;border-radius:8px;">Start</button>':
+      '<button onclick="stopTimer()" style="background:#7a2020;color:#f0c8c8;border:none;padding:10px 32px;font-size:15px;border-radius:8px;cursor:pointer;font-family:Georgia,serif;">Stop</button>')+
+      (timerSeconds>0&&!timerRunning?'<button class="btn-secondary" onclick="resetTimerSecs()">Reset</button>':'')+
+      '</div>'+
+      (timerSeconds>0&&!timerRunning?'<div style="text-align:center;margin-top:8px;color:#7eb8a4;font-size:13px;">Logged: '+fmtDur(Math.round(timerSeconds/60))+'</div>':'');
+  }
+}
+
+function setTimerMode(m){
+  timerMode=m; timerDuration=0; timerSeconds=0;
+  if(timerInterval){clearInterval(timerInterval);timerInterval=null;} timerRunning=false;
+  renderView("timer");
+}
+
+function addTime(m){
+  timerDuration=Math.max(0,timerDuration+m);
+  updateAmountDisplay();
+  var dc=$("duration-card"); if(dc)dc.innerHTML=renderDurationCard();
+}
+
+function clearTimer(){timerDuration=0;updateAmountDisplay();var dc=$("duration-card");if(dc)dc.innerHTML=renderDurationCard();}
+
+function startTimer(){
+  timerStart=Date.now()-timerSeconds*1000;
+  timerRunning=true;
+  timerInterval=setInterval(function(){
+    timerSeconds=Math.floor((Date.now()-timerStart)/1000);
+    var d=$("timer-display");
+    if(d){var h=Math.floor(timerSeconds/3600),m=Math.floor((timerSeconds%3600)/60),s=timerSeconds%60;d.textContent=h+":"+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0");}
+  },1000);
+  var dc=$("duration-card");if(dc)dc.innerHTML=renderDurationCard();
+}
+
+function stopTimer(){
+  timerRunning=false;
+  if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
+  var dc=$("duration-card");if(dc)dc.innerHTML=renderDurationCard();
+}
+
+function resetTimerSecs(){timerSeconds=0;timerRunning=false;var dc=$("duration-card");if(dc)dc.innerHTML=renderDurationCard();}
+
+function updateProjectList(){
+  var cid=$("t-client")?$("t-client").value:"";
+  var pc=$("project-card");
+  if(!pc)return;
+  if(!cid){pc.style.display="none";return;}
+  var projs=(appData.projects||[]).filter(function(p){return p.clientId===cid;});
+  if(projs.length===0){pc.style.display="none";return;}
+  pc.style.display="block";
+  var sel=$("t-project");
+  if(sel){
+    sel.innerHTML='<option value="">No project</option>'+projs.map(function(p){return'<option value="'+p.id+'">'+(p.name)+(p.rate?" ($"+p.rate+"/hr)":"")+'</option>';}).join("");
+  }
+  updateEffectiveRate();
+}
+
+function updateEffectiveRate(){
+  var pid=$("t-project")?$("t-project").value:"";
+  var cid=$("t-client")?$("t-client").value:"";
+  var proj=(appData.projects||[]).find(function(p){return p.id===pid;});
+  var client=(appData.clients||[]).find(function(c){return c.id===cid;});
+  var rate=proj&&proj.rate?proj.rate:(client&&client.rate?client.rate:appData.hourlyRate);
+  var dur=timerMode==="timer"?Math.round(timerSeconds/60):timerDuration;
+  var amt=$("t-amount");if(amt)amt.textContent=fmtCur((dur/60)*rate);
+}
+
+function updateAmountDisplay(){updateEffectiveRate();}
+
+function filterTasks(){
+  var search=$("t-task-search")?$("t-task-search").value.toLowerCase():"";
+  var sel=$("t-task");if(!sel)return;
+  var filtered=tasks().filter(function(t){return t.toLowerCase().indexOf(search)>=0;});
+  sel.innerHTML='<option value="">Select a task...</option>'+filtered.map(function(t){return'<option value="'+escHtml(t)+'">'+escHtml(t)+'</option>';}).join("");
+}
+
+function saveEntry(){
+  var clientId=$("t-client")?$("t-client").value:"";
+  var projectId=$("t-project")?$("t-project").value:"";
+  var task=$("t-task")?$("t-task").value:"";
+  var notes=$("t-notes")?$("t-notes").value:"";
+  var date=$("t-date")?$("t-date").value:today();
+  var dur=timerMode==="timer"?Math.round(timerSeconds/60):timerDuration;
+  if(!clientId||!task||!dur){alert("Please select a client, task, and add time.");return;}
+  var proj=(appData.projects||[]).find(function(p){return p.id===projectId;});
+  var client=(appData.clients||[]).find(function(c){return c.id===clientId;});
+  var rate=proj&&proj.rate?proj.rate:(client&&client.rate?client.rate:appData.hourlyRate);
+  var entry={id:Date.now().toString(),clientId,projectId,task,notes,date,duration:dur,rate,billed:false};
+  appData.entries=[entry].concat(appData.entries);
+  saveData();
+  timerDuration=0;timerSeconds=0;timerRunning=false;
+  if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
+  var sm=$("saved-msg");if(sm){sm.style.display="block";setTimeout(function(){sm.style.display="none";},2000);}
+  renderView("timer");
+}
+
+// TIMESHEETS
+function renderTimesheets(){
+  var entries=(appData.entries||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+  var totalMins=entries.reduce(function(s,e){return s+e.duration;},0);
+  var totalAmt=entries.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+  var grouped={};
+  entries.forEach(function(e){if(!grouped[e.date])grouped[e.date]=[];grouped[e.date].push(e);});
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
+    '<div style="font-size:22px;font-weight:bold;color:#ffffff;">Timesheets</div></div>';
+  if(entries.length===0){return html+'<div class="card" style="text-align:center;color:#4a7060;padding:40px;">No time entries yet.</div>';}
+  html+='<div class="total-bar" style="margin-bottom:20px;">'+
+    '<div><div class="field-label">Total Hours</div><div style="font-size:20px;font-weight:bold;color:#c8f0dc;">'+fmtDur(totalMins)+'</div></div>'+
+    '<div style="text-align:right;"><div class="field-label">Total Amount</div><div style="font-size:20px;font-weight:bold;color:#7eb8a4;">'+fmtCur(totalAmt)+'</div></div>'+
+    '</div>';
+  Object.keys(grouped).forEach(function(date){
+    html+='<div class="section-title">'+fmtDate(date)+'</div>';
+    grouped[date].forEach(function(e){
+      var c=(appData.clients||[]).find(function(cl){return cl.id===e.clientId;});
+      var p=(appData.projects||[]).find(function(pr){return pr.id===e.projectId;});
+      html+='<div class="entry-row">'+
+        '<div style="flex:1;min-width:0;">'+
+        '<div style="font-size:13px;color:#e8e0d4;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(e.task)+'</div>'+
+        '<div style="font-size:11px;color:#4a7060;">'+(c?c.name:"")+(p?" - "+p.name:"")+(e.notes?" - "+e.notes:"")+'</div>'+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;">'+
+        '<div style="font-size:14px;color:#c8f0dc;font-weight:bold;">'+fmtDur(e.duration)+'</div>'+
+        '<div style="font-size:12px;color:#7eb8a4;">'+fmtCur((e.duration/60)*e.rate)+'</div>'+
+        '</div>'+
+        '<button class="btn-danger" onclick="deleteEntry(\''+e.id+'\')">x</button>'+
+        '</div>';
+    });
+  });
+  return html;
+}
+
+function deleteEntry(id){
+  appData.entries=(appData.entries||[]).filter(function(e){return e.id!==id;});
+  saveData();renderView("timesheets");
+}
+
+// EXPENSES
+function renderExpenses(){
+  var expenses=(appData.expenses||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+  var total=expenses.reduce(function(s,e){return s+e.amount;},0);
+  var allCats=EXPENSE_CATS.concat(appData.customExpenseCategories||[]);
+  var catOpts=allCats.map(function(c){return'<option value="'+c+'">'+c+'</option>';}).join("");
+  var grouped={};
+  expenses.forEach(function(e){if(!grouped[e.date])grouped[e.date]=[];grouped[e.date].push(e);});
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
+    '<div><div style="font-size:22px;font-weight:bold;color:#ffffff;">Business Expenses</div>'+
+    '<div style="font-size:12px;color:#4a7060;margin-top:2px;">Track deductible business costs</div></div>'+
+    '<button class="btn-primary" onclick="toggleExpenseForm()">+ Add Expense</button></div>'+
+    '<div id="expense-form" class="hidden card" style="margin-bottom:20px;border-color:#2d7a5e;">'+
+    '<div style="font-size:14px;font-weight:bold;color:#c8f0dc;margin-bottom:14px;">New Expense</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'+
+    '<div><div class="field-label">Category</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">'+
+    '<button onclick="toggleNewCat()" style="background:none;border:none;color:#7eb8a4;font-size:11px;cursor:pointer;font-family:Georgia,serif;">+ New Category</button></div>'+
+    '<div id="new-cat-form" class="hidden" style="display:flex;gap:6px;margin-bottom:8px;">'+
+    '<input class="field-input" id="new-cat-input" placeholder="Category name..." style="font-size:12px;">'+
+    '<button class="btn-primary" onclick="addCustomCat()" style="font-size:11px;padding:6px 10px;white-space:nowrap;">Add</button></div>'+
+    '<select class="field-select" id="exp-cat"><option value="">Select...</option>'+catOpts+'</select></div>'+
+    '<div><div class="field-label">Amount ($) *</div><input class="field-input" type="number" step="0.01" id="exp-amt" placeholder="0.00"></div></div>'+
+    '<div style="margin-bottom:12px;"><div class="field-label">Description *</div><input class="field-input" id="exp-desc" placeholder="What was this expense for?"></div>'+
+    '<div style="margin-bottom:12px;"><div class="field-label">Date</div><input type="date" class="field-input" id="exp-date" value="'+today()+'"></div>'+
+    '<div style="display:flex;gap:10px;"><button class="btn-primary" onclick="saveExpense()">Save Expense</button>'+
+    '<button class="btn-secondary" onclick="toggleExpenseForm()">Cancel</button></div></div>';
+  if(expenses.length>0){
+    html+='<div class="total-bar" style="margin-bottom:16px;">'+
+      '<div><div class="field-label">Total Expenses</div><div style="font-size:24px;font-weight:bold;color:#c8f0dc;">'+fmtCur(total)+'</div></div>'+
+      '<div style="text-align:right;"><div class="field-label">Tax Deductible</div><div style="font-size:13px;color:#7eb8a4;margin-top:2px;">All expenses shown</div></div>'+
+      '</div>';
+  }
+  if(expenses.length===0){html+='<div class="card" style="text-align:center;color:#4a7060;padding:40px;">No expenses yet.</div>';}
+  else{
+    Object.keys(grouped).forEach(function(date){
+      html+='<div class="section-title">'+fmtDate(date)+'</div>';
+      grouped[date].forEach(function(e){
+        html+='<div class="entry-row">'+
+          '<div style="flex:1;min-width:0;">'+
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'+
+          '<div style="font-size:13px;color:#e8e0d4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(e.description)+'</div>'+
+          (e.category?'<span class="badge">'+escHtml(e.category)+'</span>':'')+
+          '</div></div>'+
+          '<div style="font-size:14px;color:#c8f0dc;font-weight:bold;flex-shrink:0;">'+fmtCur(e.amount)+'</div>'+
+          '<button class="btn-danger" onclick="deleteExpense(\''+e.id+'\')">x</button>'+
+          '</div>';
+      });
+    });
+  }
+  return html;
+}
+
+function toggleExpenseForm(){var f=$("expense-form");if(f)f.classList.toggle("hidden");}
+function toggleNewCat(){var f=$("new-cat-form");if(f){f.style.display=f.style.display==="none"||f.style.display===""?"flex":"none";}}
+
+function addCustomCat(){
+  var inp=$("new-cat-input");if(!inp)return;
+  var cat=inp.value.trim();
+  if(!cat)return;
+  var cats=appData.customExpenseCategories||[];
+  if(cats.indexOf(cat)<0){cats.push(cat);appData.customExpenseCategories=cats;saveData();}
+  renderView("expenses");
+}
+
+function saveExpense(){
+  var cat=$("exp-cat")?$("exp-cat").value:"";
+  var amt=parseFloat($("exp-amt")?$("exp-amt").value:0)||0;
+  var desc=$("exp-desc")?$("exp-desc").value:"";
+  var date=$("exp-date")?$("exp-date").value:today();
+  if(!amt||!desc){alert("Please add a description and amount.");return;}
+  var exp={id:Date.now().toString(),category:cat,description:desc,amount:amt,date};
+  appData.expenses=[exp].concat(appData.expenses||[]);
+  saveData();renderView("expenses");
+}
+
+function deleteExpense(id){
+  appData.expenses=(appData.expenses||[]).filter(function(e){return e.id!==id;});
+  saveData();renderView("expenses");
+}
+
+// CLIENTS
+function renderClients(){
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
+    '<div style="font-size:22px;font-weight:bold;color:#ffffff;">Clients</div>'+
+    '<button class="btn-primary" onclick="toggleClientForm()">+ Add Client</button></div>'+
+    '<div id="client-form" class="hidden card" style="margin-bottom:20px;border-color:#2d7a5e;">'+
+    '<div style="font-size:14px;font-weight:bold;color:#c8f0dc;margin-bottom:14px;">New Client</div>'+
+    '<div style="display:grid;gap:12px;">'+
+    '<div><div class="field-label">Name *</div><input class="field-input" id="cl-name" placeholder="Full name"></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+    '<div><div class="field-label">Email</div><input class="field-input" id="cl-email" type="email"></div>'+
+    '<div><div class="field-label">Phone</div><input class="field-input" id="cl-phone"></div></div>'+
+    '<div><div class="field-label">Address</div><input class="field-input" id="cl-address" placeholder="Street, City, State ZIP"></div>'+
+    '<div><div class="field-label">Hourly Rate ($ /hr) — overrides default</div><input class="field-input" type="number" step="0.01" id="cl-rate" placeholder="Leave blank to use default rate"></div>'+
+    '<div style="display:flex;gap:10px;"><button class="btn-primary" onclick="saveClient()">Save Client</button>'+
+    '<button class="btn-secondary" onclick="toggleClientForm()">Cancel</button></div></div></div>';
+  if((appData.clients||[]).length===0){return html+'<div class="card" style="text-align:center;color:#4a7060;padding:40px;">No clients yet.</div>';}
+  (appData.clients||[]).forEach(function(c){
+    var unbilled=(appData.entries||[]).filter(function(e){return e.clientId===c.id&&!e.billed;}).reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+    var cProjects=(appData.projects||[]).filter(function(p){return p.clientId===c.id;});
+    html+='<div class="card" id="client-'+c.id+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+      '<div style="flex:1;cursor:pointer;" onclick="toggleClientExpand(\''+c.id+'\')">'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+      '<span style="color:#4a7060;font-size:12px;" id="arrow-'+c.id+'">&#9654;</span>'+
+      '<span style="font-size:16px;font-weight:bold;color:#c8f0dc;">'+escHtml(c.name)+'</span>'+
+      (cProjects.length>0?'<span class="badge">'+cProjects.length+' project'+(cProjects.length!==1?"s":"")+'</span>':'')+
+      '</div>'+
+      (c.email?'<div style="font-size:12px;color:#4a7060;margin-top:2px;padding-left:20px;">'+escHtml(c.email)+'</div>':'')+
+      (c.address?'<div style="font-size:12px;color:#4a7060;padding-left:20px;">'+escHtml(c.address)+'</div>':'')+(c.rate?'<div style="font-size:12px;color:#7eb8a4;padding-left:20px;">Rate: $'+c.rate+'/hr</div>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;">'+
+      (unbilled>0?'<span style="color:#7eb8a4;font-size:13px;font-weight:bold;">'+fmtCur(unbilled)+' unbilled</span>':'')+
+      '<button class="btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="editClient(\''+c.id+'\')">Manage</button>'+
+      '<button class="btn-danger" onclick="deleteClient(\''+c.id+'\')">Delete</button>'+
+      '</div></div>'+
+      '<div id="client-expand-'+c.id+'" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #1e3040;">'+
+      '<div id="client-edit-'+c.id+'" style="display:none;margin-bottom:14px;">'+
+      '<div style="font-size:13px;font-weight:bold;color:#c8f0dc;margin-bottom:12px;">Edit Client</div>'+
+      '<div style="display:grid;gap:10px;">'+
+      '<div><div class="field-label">Name *</div><input class="field-input" id="edit-name-'+c.id+'" value="'+escHtml(c.name)+'"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+      '<div><div class="field-label">Email</div><input class="field-input" id="edit-email-'+c.id+'" value="'+escHtml(c.email||"")+'"></div>'+
+      '<div><div class="field-label">Phone</div><input class="field-input" id="edit-phone-'+c.id+'" value="'+escHtml(c.phone||"")+'"></div></div>'+
+      '<div><div class="field-label">Address</div><input class="field-input" id="edit-address-'+c.id+'" value="'+escHtml(c.address||"")+'"></div>'+
+      '<div style="display:flex;gap:8px;"><button class="btn-primary" onclick="saveClientEdit(\''+c.id+'\')">Save Changes</button>'+
+      '<button class="btn-secondary" onclick="cancelClientEdit(\''+c.id+'\')">Cancel</button></div></div></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+      '<div class="field-label" style="margin:0;">Projects</div>'+
+      '<button class="btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="toggleProjectForm(\''+c.id+'\')">+ Add Project</button></div>'+
+      '<div id="proj-form-'+c.id+'" style="display:none;margin-bottom:10px;">'+
+      '<div style="display:grid;gap:8px;">'+
+      '<input class="field-input" id="pf-name-'+c.id+'" placeholder="Project name...">'+
+      '<input class="field-input" id="pf-uci-'+c.id+'" placeholder="UCI number...">'+
+      '<input class="field-input" type="number" id="pf-budget-'+c.id+'" placeholder="Yearly budget ($)...">'+
+      '<input class="field-input" type="number" step="0.01" id="pf-rate-'+c.id+'" placeholder="Custom hourly rate (optional)...">'+
+      '<div style="display:flex;gap:8px;"><button class="btn-primary" onclick="saveProject(\''+c.id+'\')">Save</button>'+
+      '<button class="btn-secondary" onclick="toggleProjectForm(\''+c.id+'\')">Cancel</button></div></div></div>'+
+      renderProjectList(c.id)+
+      '</div></div>';
+  });
+  return html;
+}
+
+function renderProjectList(cid){
+  var projs=(appData.projects||[]).filter(function(p){return p.clientId===cid;});
+  if(projs.length===0)return'<div style="color:#4a7060;font-size:13px;">No projects yet.</div>';
+  return projs.map(function(proj){
+    var pe=(appData.entries||[]).filter(function(e){return e.projectId===proj.id;});
+    var pa=pe.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+    var pm=pe.reduce(function(s,e){return s+e.duration;},0);
+    var budget=proj.budget||0;
+    var pct=budget>0?Math.min(100,(pa/budget)*100):0;
+    var rem=budget>0?budget-pa:null;
+    var over=rem!==null&&rem<0;
+    var barColor=pct>=90?"#c85a3a":pct>=70?"#c8883a":"#2d7a5e";
+    return'<div style="background:#1a2d3d;border-radius:8px;margin-bottom:8px;padding:12px 14px;">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px;">'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+      '<span style="color:#2d7a5e;font-size:12px;">&#9670;</span>'+
+      '<div><div style="font-size:13px;color:#e8e0d4;">'+escHtml(proj.name)+'</div>'+
+      (proj.uci?'<div style="font-size:11px;color:#4a7060;">UCI: '+escHtml(proj.uci)+'</div>':'')+
+      (proj.rate?'<div style="font-size:11px;color:#7eb8a4;">Rate: $'+proj.rate+'/hr</div>':'')+
+      '</div></div>'+
+      '<button class="btn-danger" style="padding:3px 8px;font-size:11px;" onclick="deleteProject(\''+proj.id+'\')">x</button></div>'+
+      (budget>0?
+      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px;">'+
+      '<span style="color:#7a9888;">'+fmtCur(pa)+' of '+fmtCur(budget)+(pm>0?' - '+fmtDur(pm):'')+'</span>'+
+      '<span style="color:'+(over?"#c85a3a":"#7eb8a4")+';font-weight:bold;">'+(over?fmtCur(Math.abs(rem))+" over":fmtCur(rem)+" left")+'</span></div>'+
+      '<div style="background:#0f1923;border-radius:4px;height:6px;overflow:hidden;">'+
+      '<div style="width:'+pct+'%;height:100%;background:'+barColor+';border-radius:4px;"></div></div>'+
+      '<div style="font-size:10px;color:#4a7060;margin-top:4px;text-align:right;">'+pct.toFixed(0)+'% used</div>':
+      '<div style="font-size:11px;color:#4a7060;">'+(pm>0?fmtDur(pm)+" - "+fmtCur(pa)+" logged - No budget set":"No budget set")+'</div>')+
+      '</div>';
+  }).join("");
+}
+
+function toggleClientForm(){var f=$("client-form");if(f)f.classList.toggle("hidden");}
+function toggleClientExpand(id){
+  var el=$("client-expand-"+id);var arrow=$("arrow-"+id);
+  if(!el)return;
+  var vis=el.style.display!=="none";
+  el.style.display=vis?"none":"block";
+  if(arrow)arrow.innerHTML=vis?"&#9654;":"&#9660;";
+}
+function editClient(id){
+  toggleClientExpand(id);
+  var el=$("client-edit-"+id);if(el)el.style.display="block";
+}
+function cancelClientEdit(id){var el=$("client-edit-"+id);if(el)el.style.display="none";}
+function saveClientEdit(id){
+  var name=$("edit-name-"+id)?$("edit-name-"+id).value:"";
+  if(!name.trim())return;
+  appData.clients=(appData.clients||[]).map(function(c){
+    if(c.id===id)return Object.assign({},c,{name:name.trim(),email:$("edit-email-"+id)?$("edit-email-"+id).value:"",phone:$("edit-phone-"+id)?$("edit-phone-"+id).value:"",address:$("edit-address-"+id)?$("edit-address-"+id).value:""});
+    return c;
+  });
+  saveData();renderView("clients");
+}
+function saveClient(){
+  var name=$("cl-name")?$("cl-name").value:"";
+  if(!name.trim())return;
+  var c={id:Date.now().toString(),name:name.trim(),email:$("cl-email")?$("cl-email").value:"",phone:$("cl-phone")?$("cl-phone").value:"",address:$("cl-address")?$("cl-address").value:"",rate:parseFloat($("cl-rate")?$("cl-rate").value:0)||null};
+  appData.clients=(appData.clients||[]).concat([c]);
+  saveData();renderView("clients");
+}
+function deleteClient(id){
+  if(!confirm("Delete this client?"))return;
+  appData.clients=(appData.clients||[]).filter(function(c){return c.id!==id;});
+  saveData();renderView("clients");
+}
+function toggleProjectForm(cid){
+  var f=$("proj-form-"+cid);if(f)f.style.display=f.style.display==="none"?"block":"none";
+}
+function saveProject(cid){
+  var name=$("pf-name-"+cid)?$("pf-name-"+cid).value:"";
+  if(!name.trim())return;
+  var p={id:Date.now().toString(),clientId:cid,name:name.trim(),
+    uci:$("pf-uci-"+cid)?$("pf-uci-"+cid).value:"",
+    budget:parseFloat($("pf-budget-"+cid)?$("pf-budget-"+cid).value:0)||0,
+    rate:parseFloat($("pf-rate-"+cid)?$("pf-rate-"+cid).value:0)||null};
+  appData.projects=(appData.projects||[]).concat([p]);
+  saveData();renderView("clients");
+}
+function deleteProject(id){
+  appData.projects=(appData.projects||[]).filter(function(p){return p.id!==id;});
+  saveData();renderView("clients");
+}
+
+// INVOICES
+function toggleRecurringPanel(){
+  var p=$("recurring-panel");
+  if(p)p.style.display=p.style.display==="none"?"block":"none";
+}
+
+function showRecurringTab(tab){
+  var list=$("recurring-list-tab");
+  var newt=$("recurring-new-tab");
+  if(list)list.style.display=tab==="list"?"block":"none";
+  if(newt)newt.style.display=tab==="new"?"block":"none";
+}
+
+function saveRecurring(){
+  var cid=$("r-client")?$("r-client").value:"";
+  var amt=parseFloat($("r-amount")?$("r-amount").value:0)||0;
+  var desc=$("r-desc")?$("r-desc").value:"";
+  var day=parseInt($("r-day")?$("r-day").value:1)||1;
+  if(!cid||!amt||!desc){alert("Please fill in client, amount and description.");return;}
+  var rec={id:Date.now().toString(),clientId:cid,amount:amt,description:desc,dayOfMonth:day,active:true,lastGenerated:null};
+  appData.recurringInvoices=(appData.recurringInvoices||[]).concat([rec]);
+  saveData();renderView("invoices");
+}
+
+function toggleRecurringActive(id){
+  appData.recurringInvoices=(appData.recurringInvoices||[]).map(function(r){
+    return r.id===id?Object.assign({},r,{active:!r.active}):r;
+  });
+  saveData();renderView("invoices");
+}
+
+function deleteRecurring(id){
+  if(!confirm("Remove this recurring invoice?"))return;
+  appData.recurringInvoices=(appData.recurringInvoices||[]).filter(function(r){return r.id!==id;});
+  saveData();renderView("invoices");
+}
+
+function generateOneRecurring(id){
+  var currentMonth=new Date().toISOString().slice(0,7);
+  var r=(appData.recurringInvoices||[]).find(function(ri){return ri.id===id;});
+  if(!r)return;
+  var inv={id:Date.now().toString(),
+    invoiceNumber:"INV-"+String((appData.invoices||[]).length+1).padStart(4,"0"),
+    clientId:r.clientId,date:today(),entries:[],expenses:[],services:[],
+    recurringDescription:r.description,total:r.amount,status:"unpaid",isRecurring:true};
+  appData.invoices=[inv].concat(appData.invoices||[]);
+  appData.recurringInvoices=(appData.recurringInvoices||[]).map(function(ri){
+    return ri.id===id?Object.assign({},ri,{lastGenerated:currentMonth}):ri;
+  });
+  saveData();renderView("invoices");
+}
+
+function generateAllRecurring(){
+  var currentMonth=new Date().toISOString().slice(0,7);
+  var ready=(appData.recurringInvoices||[]).filter(function(r){return r.active&&r.lastGenerated!==currentMonth;});
+  var newInvs=ready.map(function(r,i){
+    return{id:(Date.now()+i).toString(),
+      invoiceNumber:"INV-"+String((appData.invoices||[]).length+i+1).padStart(4,"0"),
+      clientId:r.clientId,date:today(),entries:[],expenses:[],services:[],
+      recurringDescription:r.description,total:r.amount,status:"unpaid",isRecurring:true};
+  });
+  appData.invoices=newInvs.concat(appData.invoices||[]);
+  appData.recurringInvoices=(appData.recurringInvoices||[]).map(function(r){
+    return ready.find(function(rr){return rr.id===r.id;})?Object.assign({},r,{lastGenerated:currentMonth}):r;
+  });
+  saveData();renderView("invoices");
+}
+
+function renderInvoices(){
+  var unbilled=(appData.clients||[]).map(function(c){
+    var ents=(appData.entries||[]).filter(function(e){return e.clientId===c.id&&!e.billed;});
+    var total=ents.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+    return{client:c,entries:ents,total:total};
+  });
+  var currentMonth=new Date().toISOString().slice(0,7);
+  var recurringList=appData.recurringInvoices||[];
+  var readyToGenerate=recurringList.filter(function(r){return r.active&&r.lastGenerated!==currentMonth;});
+
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
+    '<div style="font-size:22px;font-weight:bold;color:#ffffff;">Invoices</div>'+
+    '<div style="display:flex;gap:8px;">'+
+    '<button class="btn-secondary" onclick="toggleRecurringPanel()" style="position:relative;">'+
+    '🔄 Recurring'+(readyToGenerate.length>0?'<span style="position:absolute;top:-6px;right:-6px;background:#c8883a;color:white;border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;">'+readyToGenerate.length+'</span>':'')+
+    '</button>'+
+    '<button class="btn-primary" onclick="showCreateInvoice()">+ Create Invoice</button></div></div>'+
+    '<div id="recurring-panel" style="display:none;" class="card" style="margin-bottom:20px;border-color:#2d5a8e;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
+    '<div style="font-size:15px;font-weight:bold;color:#c8f0dc;">Recurring Invoices</div>'+
+    '<div style="display:flex;gap:8px;">'+
+    '<button class="btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="showRecurringTab(\'list\')">List</button>'+
+    '<button class="btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="showRecurringTab(\'new\')">+ New</button>'+
+    '</div></div>'+
+    '<div id="recurring-list-tab">'+
+    (readyToGenerate.length>0?
+      '<div style="background:#1a3a2e;border:1px solid #2d7a5e;border-radius:8px;padding:12px 14px;margin-bottom:14px;">'+
+      '<div style="font-size:13px;color:#c8f0dc;margin-bottom:8px;">🔔 '+readyToGenerate.length+' invoice'+(readyToGenerate.length!==1?"s":"")+" ready for "+new Date().toLocaleDateString("en-US",{month:"long",year:"numeric"})+'</div>'+
+      '<button class="btn-primary" style="font-size:13px;padding:8px 16px;" onclick="generateAllRecurring()">Generate All ('+fmtCur(readyToGenerate.reduce(function(s,r){return s+r.amount;},0))+')</button>'+
+      '</div>':'')+
+    (recurringList.length===0?'<div style="text-align:center;color:#4a7060;padding:20px;font-size:13px;">No recurring invoices yet. Tap + New to set one up.</div>':
+      recurringList.map(function(r){
+        var c=(appData.clients||[]).find(function(cl){return cl.id===r.clientId;});
+        var isReady=r.active&&r.lastGenerated!==currentMonth;
+        return'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #1e3040;">'+
+          '<div style="flex:1;">'+
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'+
+          '<div style="font-size:13px;color:#e8e0d4;font-weight:bold;">'+(c?escHtml(c.name):"")+'</div>'+
+          (isReady?'<span style="background:#c8883a;color:white;font-size:10px;padding:1px 7px;border-radius:50px;">DUE</span>':'')+
+          (!r.active?'<span style="background:#2a3d4f;color:#7a9888;font-size:10px;padding:1px 7px;border-radius:50px;">PAUSED</span>':'')+
+          '</div>'+
+          '<div style="font-size:12px;color:#4a7060;">'+escHtml(r.description)+' - '+fmtCur(r.amount)+'/month</div>'+
+          (r.lastGenerated?'<div style="font-size:11px;color:#4a7060;">Last: '+r.lastGenerated+'</div>':'')+
+          '</div>'+
+          '<div style="display:flex;gap:6px;flex-shrink:0;">'+
+          (isReady?'<button class="btn-primary" style="font-size:11px;padding:4px 10px;" onclick="generateOneRecurring(\''+r.id+'\')">Generate</button>':'')+
+          '<button class="btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="toggleRecurringActive(\''+r.id+'\')">'+(r.active?"Pause":"Resume")+'</button>'+
+          '<button class="btn-danger" style="font-size:11px;padding:4px 8px;" onclick="deleteRecurring(\''+r.id+'\')">x</button>'+
+          '</div></div>';
+      }).join(""))+
+    '</div>'+
+    '<div id="recurring-new-tab" style="display:none;">'+
+    '<div style="display:grid;gap:12px;">'+
+    '<div><div class="field-label">Client *</div>'+
+    '<select class="field-select" id="r-client"><option value="">Select client...</option>'+
+    (appData.clients||[]).map(function(c){return'<option value="'+c.id+'">'+escHtml(c.name)+'</option>';}).join("")+
+    '</select></div>'+
+    '<div><div class="field-label">Monthly Amount ($) *</div><input class="field-input" type="number" step="0.01" id="r-amount" placeholder="e.g. 500.00"></div>'+
+    '<div><div class="field-label">Description *</div><input class="field-input" id="r-desc" placeholder="e.g. Monthly IF Services"></div>'+
+    '<div><div class="field-label">Generate on Day of Month</div>'+
+    '<select class="field-select" id="r-day"><option value="1">1st (beginning of month)</option><option value="15">15th (mid month)</option><option value="28">28th (end of month)</option></select></div>'+
+    '<div style="display:flex;gap:10px;"><button class="btn-primary" onclick="saveRecurring()">Save Recurring Invoice</button>'+
+    '<button class="btn-secondary" onclick="showRecurringTab(\'list\')">Cancel</button></div>'+
+    '</div></div></div>';
+  var hasUnbilled=unbilled.filter(function(x){return x.total>0;});
+  if(hasUnbilled.length>0){
+    html+='<div class="card" style="border-color:#2d5a3e;margin-bottom:20px;"><div class="field-label" style="margin-bottom:10px;">Unbilled Time</div>';
+    hasUnbilled.forEach(function(x){
+      html+='<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1e3040;">'+
+        '<span style="color:#e8e0d4;font-size:14px;">'+escHtml(x.client.name)+'</span>'+
+        '<span style="color:#7eb8a4;font-weight:bold;">'+fmtCur(x.total)+'</span></div>';
+    });
+    html+='</div>';
+  }
+  if((appData.invoices||[]).length===0){html+='<div class="card" style="text-align:center;color:#4a7060;padding:40px;">No invoices yet.</div>';}
+  else{
+    (appData.invoices||[]).forEach(function(inv){
+      var c=(appData.clients||[]).find(function(cl){return cl.id===inv.clientId;});
+      html+='<div class="card" style="cursor:pointer;" onclick="viewInvoice(\''+inv.id+'\')">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+        '<div><div style="font-size:14px;font-weight:bold;color:#c8f0dc;">'+inv.invoiceNumber+(inv.isRecurring?' <span style="background:#1a3a5e;color:#7ab8f0;font-size:10px;padding:1px 7px;border-radius:50px;">RECURRING</span>':'')+'</div>'+
+        '<div style="font-size:12px;color:#4a7060;">'+(c?c.name:"")+" - "+fmtDate(inv.date)+'</div></div>'+
+        '<div style="text-align:right;"><div style="font-size:16px;font-weight:bold;color:#7eb8a4;">'+fmtCur(inv.total)+'</div>'+
+        '<div style="font-size:11px;color:'+(inv.status==="paid"?"#5db89a":"#c8883a")+';text-transform:uppercase;">'+inv.status+'</div></div>'+
+        '</div></div>';
+    });
+  }
+  html+='<div id="invoice-modal" style="display:none;" class="modal-overlay" onclick="closeInvoiceModal()"><div class="modal" onclick="event.stopPropagation()" id="invoice-modal-content"></div></div>';
+  html+='<div id="create-invoice-modal" style="display:none;" class="modal-overlay" onclick="closeCreateModal()"><div class="modal" onclick="event.stopPropagation()" id="create-invoice-content"></div></div>';
+  return html;
+}
+
+function showCreateInvoice(){
+  var modal=$("create-invoice-modal");if(!modal){renderView("invoices");return;}
+  var clientOpts=(appData.clients||[]).map(function(c){return'<option value="'+c.id+'">'+escHtml(c.name)+'</option>';}).join("");
+  $("create-invoice-content").innerHTML=
+    '<div style="font-size:17px;font-weight:bold;color:#c8f0dc;margin-bottom:16px;">Create Invoice</div>'+
+    '<div class="field-label">Client</div>'+
+    '<select class="field-select" id="inv-client" style="margin-bottom:16px;" onchange="updateInvoicePreview()"><option value="">Choose client...</option>'+clientOpts+'</select>'+
+    '<div id="inv-preview"></div>'+
+    '<div style="display:flex;gap:10px;margin-top:16px;">'+
+    '<button class="btn-primary" onclick="generateInvoice()">Generate Invoice</button>'+
+    '<button class="btn-secondary" onclick="closeCreateModal()">Cancel</button></div>';
+  modal.style.display="flex";
+}
+
+function updateInvoicePreview(){
+  var cid=$("inv-client")?$("inv-client").value:"";
+  var prev=$("inv-preview");if(!prev)return;
+  if(!cid){prev.innerHTML="";return;}
+  var ents=(appData.entries||[]).filter(function(e){return e.clientId===cid&&!e.billed;});
+  var total=ents.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+  var html="";
+  if(ents.length>0){
+    html+='<div class="field-label" style="margin-bottom:6px;">Unbilled Time</div>';
+    ents.forEach(function(e){
+      html+='<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1e3040;font-size:13px;">'+
+        '<span style="color:#a8c8b4;flex:1;margin-right:8px;">'+escHtml(e.task)+'</span>'+
+        '<span style="color:#7eb8a4;">'+fmtDur(e.duration)+" - "+fmtCur((e.duration/60)*e.rate)+'</span></div>';
+    });
+  }
+  html+='<div style="background:#1a3a2e;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;margin-top:10px;">'+
+    '<span style="color:#c8f0dc;">Total</span><span style="color:#7eb8a4;font-size:18px;font-weight:bold;">'+fmtCur(total)+'</span></div>';
+  prev.innerHTML=html;
+}
+
+function generateInvoice(){
+  var cid=$("inv-client")?$("inv-client").value:"";
+  if(!cid)return;
+  var ents=(appData.entries||[]).filter(function(e){return e.clientId===cid&&!e.billed;});
+  var total=ents.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+  var inv={id:Date.now().toString(),invoiceNumber:"INV-"+String((appData.invoices||[]).length+1).padStart(4,"0"),clientId:cid,date:today(),entries:ents,expenses:[],services:[],total:total,status:"unpaid"};
+  appData.invoices=[inv].concat(appData.invoices||[]);
+  appData.entries=(appData.entries||[]).map(function(e){
+    if(ents.find(function(ce){return ce.id===e.id;}))return Object.assign({},e,{billed:true});
+    return e;
+  });
+  saveData();closeCreateModal();renderView("invoices");
+}
+
+function closeCreateModal(){var m=$("create-invoice-modal");if(m)m.style.display="none";}
+
+function viewInvoice(id){
+  var inv=(appData.invoices||[]).find(function(i){return i.id===id;});
+  if(!inv)return;
+  var c=(appData.clients||[]).find(function(cl){return cl.id===inv.clientId;});
+  var modal=$("invoice-modal");if(!modal)return;
+  var rows="";
+  if(inv.isRecurring&&inv.recurringDescription){
+    rows+='<tr><td style="color:#a8c8b4;">'+escHtml(inv.recurringDescription)+'</td><td style="color:#7a9888;">'+fmtDate(inv.date)+'</td><td style="color:#e8e0d4;">Monthly</td><td style="color:#7eb8a4;">'+fmtCur(inv.total)+'</td></tr>';
+  }
+  (inv.entries||[]).forEach(function(e){
+    rows+='<tr><td style="color:#a8c8b4;">'+escHtml(e.task)+'</td><td style="color:#7a9888;">'+fmtDate(e.date)+'</td><td style="color:#e8e0d4;">'+fmtDur(e.duration)+'</td><td style="color:#7eb8a4;">'+fmtCur((e.duration/60)*e.rate)+'</td></tr>';
+  });
+  $("invoice-modal-content").innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #2a3d4f;">'+
+    '<div><div style="font-size:15px;font-weight:bold;color:#c8f0dc;">'+escHtml(appData.businessName||"Empowerment Services")+'</div>'+
+    (appData.address1?'<div style="font-size:11px;color:#4a7060;">'+escHtml(appData.address1)+'</div>':'')+
+    (appData.address2?'<div style="font-size:11px;color:#4a7060;">'+escHtml(appData.address2)+'</div>':'')+
+    '</div>'+
+    '<div style="text-align:right;"><div style="font-size:18px;font-weight:bold;color:#c8f0dc;">'+inv.invoiceNumber+'</div>'+
+    '<div style="font-size:12px;color:#4a7060;">'+fmtDate(inv.date)+'</div></div></div>'+
+    '<div style="margin-bottom:12px;"><div style="font-size:11px;color:#4a7060;text-transform:uppercase;letter-spacing:.08em;">Bill To</div>'+
+    '<div style="color:#e8e0d4;">'+(c?escHtml(c.name):"")+'</div></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">'+
+    '<button class="btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="editInvoice(\''+id+'\')" >Edit</button>'+
+    (inv.status==="unpaid"?'<button class="btn-primary" style="font-size:12px;padding:6px 12px;" onclick="markPaid(\''+id+'\')">Mark Paid</button>':'')+
+    '<button class="btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="printInv(\''+id+'\')">Save as PDF</button>'+
+    '<button class="btn-danger" style="font-size:12px;padding:6px 12px;" onclick="deleteInvoice(\''+id+'\')" >Delete</button>'+
+    '<button class="btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="closeInvoiceModal()">Close</button></div>'+
+    '<table style="width:100%;border-collapse:collapse;margin-top:12px;">'+
+    '<thead><tr>'+
+    '<th style="text-align:left;padding:8px 10px;background:#1a3040;font-size:11px;color:#7a9888;">Task</th>'+
+    '<th style="text-align:left;padding:8px 10px;background:#1a3040;font-size:11px;color:#7a9888;">Date</th>'+
+    '<th style="text-align:left;padding:8px 10px;background:#1a3040;font-size:11px;color:#7a9888;">Hours</th>'+
+    '<th style="text-align:left;padding:8px 10px;background:#1a3040;font-size:11px;color:#7a9888;">Amount</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="background:#1a3a2e;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;margin-top:16px;">'+
+    '<span style="color:#c8f0dc;font-weight:bold;">Total Due</span>'+
+    '<span style="color:#7eb8a4;font-size:20px;font-weight:bold;">'+fmtCur(inv.total)+'</span></div>'+
+    '<div style="margin-top:8px;text-align:right;font-size:12px;color:'+(inv.status==="paid"?"#5db89a":"#c8883a")+';text-transform:uppercase;">'+(inv.status==="paid"?"Paid":"Unpaid")+'</div>';
+  modal.style.display="flex";
+}
+
+function closeInvoiceModal(){var m=$("invoice-modal");if(m)m.style.display="none";}
+
+function markPaid(id){
+  appData.invoices=(appData.invoices||[]).map(function(i){return i.id===id?Object.assign({},i,{status:"paid"}):i;});
+  saveData();closeInvoiceModal();renderView("invoices");
+}
+
+function deleteInvoice(id){
+  if(!confirm("Delete this invoice? This cannot be undone."))return;
+  var inv=(appData.invoices||[]).find(function(i){return i.id===id;});
+  if(inv){
+    // Mark entries as unbilled again
+    appData.entries=(appData.entries||[]).map(function(e){
+      if((inv.entries||[]).find(function(ie){return ie.id===e.id;}))return Object.assign({},e,{billed:false});
+      return e;
+    });
+  }
+  appData.invoices=(appData.invoices||[]).filter(function(i){return i.id!==id;});
+  saveData();closeInvoiceModal();renderView("invoices");
+}
+
+function editInvoice(id){
+  var inv=(appData.invoices||[]).find(function(i){return i.id===id;});
+  if(!inv)return;
+  var newTotal=prompt("Edit invoice total amount:",inv.total);
+  if(newTotal===null)return;
+  var newNotes=prompt("Edit invoice notes (optional):",inv.notes||"");
+  appData.invoices=(appData.invoices||[]).map(function(i){
+    if(i.id===id)return Object.assign({},i,{total:parseFloat(newTotal)||i.total,notes:newNotes});
+    return i;
+  });
+  saveData();closeInvoiceModal();renderView("invoices");
+}
+
+function printInv(id){
+  var inv=(appData.invoices||[]).find(function(i){return i.id===id;});
+  if(!inv)return;
+  var c=(appData.clients||[]).find(function(cl){return cl.id===inv.clientId;});
+  var biz=appData.businessName||"Empowerment Services";
+  var rows="";
+  if(inv.isRecurring&&inv.recurringDescription){
+    rows+="<tr><td>"+inv.recurringDescription+"</td><td>"+fmtDate(inv.date)+"</td><td>Monthly</td><td>"+fmtCur(inv.total)+"</td></tr>";
+  }
+  (inv.entries||[]).forEach(function(e){
+    rows+="<tr><td>"+e.task+"</td><td>"+fmtDate(e.date)+"</td><td>"+fmtDur(e.duration)+"</td><td>"+fmtCur((e.duration/60)*e.rate)+"</td></tr>";
+  });
+  var html="<!DOCTYPE html><html><head><title>"+inv.invoiceNumber+"</title>"+
+    "<style>body{font-family:Georgia,serif;color:#1a2a1a;padding:48px;max-width:750px;margin:0 auto;}"+
+    "table{width:100%;border-collapse:collapse;}th{text-align:left;padding:10px;background:#f0f8f4;font-size:11px;text-transform:uppercase;border-bottom:2px solid #2d7a5e;}"+
+    "td{padding:10px;border-bottom:1px solid #e0ece6;font-size:13px;}.total{background:#f0f8f4;font-weight:bold;}</style></head><body>"+
+    "<div style='display:flex;justify-content:space-between;margin-bottom:36px;padding-bottom:24px;border-bottom:2px solid #2d7a5e;'>"+
+    "<div><div style='font-size:20px;font-weight:bold;'>"+biz+"</div>"+
+    (appData.address1?"<div style='font-size:12px;color:#4a6a5a;'>"+appData.address1+"</div>":"")+
+    (appData.address2?"<div style='font-size:12px;color:#4a6a5a;'>"+appData.address2+"</div>":"")+
+    "</div><div style='text-align:right;'><div style='font-size:24px;font-weight:bold;color:#2d7a5e;'>"+inv.invoiceNumber+"</div>"+
+    "<div style='font-size:12px;color:#4a6a5a;'>"+fmtDate(inv.date)+"</div></div></div>"+
+    "<div style='margin-bottom:28px;'><div style='font-size:10px;text-transform:uppercase;color:#7a9888;'>Bill To</div>"+
+    "<div style='font-size:16px;font-weight:bold;'>"+(c?c.name:"")+"</div></div>"+
+    "<table><thead><tr><th>Description</th><th>Date</th><th>Hours</th><th>Amount</th></tr></thead>"+
+    "<tbody>"+rows+"<tr class='total'><td colspan='3'>Total Due</td><td>"+fmtCur(inv.total)+"</td></tr></tbody></table>"+
+    "</body></html>";
+  var w=window.open("","_blank");w.document.write(html);w.document.close();w.focus();setTimeout(function(){w.print();},500);
+}
+
+// REPORTS
+function renderReports(){
+  var entries=appData.entries||[];
+  var grandMins=entries.reduce(function(s,e){return s+e.duration;},0);
+  var grandTime=entries.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+  var grandExp=(appData.expenses||[]).reduce(function(s,e){return s+e.amount;},0);
+  var year=new Date().getFullYear();
+  var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  var html='<div style="font-size:22px;font-weight:bold;color:#ffffff;margin-bottom:20px;">Reports</div>';
+
+  // Summary cards
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:24px;">';
+  [["Total Hours",fmtDur(grandMins),"#c8f0dc"],["Time Billed",fmtCur(grandTime),"#7eb8a4"],["Expenses",fmtCur(grandExp),"#c8a87e"]].forEach(function(item){
+    html+='<div style="background:#17232f;border:1px solid #2a3d4f;border-radius:10px;padding:14px 16px;">'+
+      '<div style="font-size:10px;color:#4a7060;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;">'+item[0]+'</div>'+
+      '<div style="font-size:20px;font-weight:bold;color:'+item[2]+';">'+item[1]+'</div></div>';
+  });
+  html+='</div>';
+
+  // Project Budget Charts
+  var projectsWithBudget=(appData.projects||[]).filter(function(p){return p.budget>0;});
+  if(projectsWithBudget.length>0){
+    html+='<div style="font-size:16px;font-weight:bold;color:#c8f0dc;margin-bottom:14px;">Project Budget Tracker</div>';
+    projectsWithBudget.forEach(function(proj){
+      var client=(appData.clients||[]).find(function(c){return c.id===proj.clientId;});
+      var projEntries=entries.filter(function(e){return e.projectId===proj.id;});
+
+      // Monthly billing for this project
+      var monthlyAmts=months.map(function(m,i){
+        var ms=year+"-"+(i+1).toString().padStart(2,"0");
+        return projEntries.filter(function(e){return e.date&&e.date.startsWith(ms);})
+          .reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+      });
+
+      var totalBilled=projEntries.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+      var budget=proj.budget;
+      var remaining=budget-totalBilled;
+      var pct=Math.min(100,(totalBilled/budget)*100);
+      var over=remaining<0;
+      var barColor=pct>=90?"#c85a3a":pct>=70?"#c8883a":"#2d7a5e";
+      var maxMonth=Math.max.apply(null,monthlyAmts.concat([budget/12]));
+      var currentMonth=new Date().getMonth();
+      var monthlyBudget=budget/12;
+
+      html+='<div class="card" style="margin-bottom:16px;">'+
+        // Header
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">'+
+        '<div>'+
+        '<div style="font-size:15px;font-weight:bold;color:#c8f0dc;">'+(client?escHtml(client.name):"")+'</div>'+
+        '<div style="font-size:13px;color:#7a9888;">'+escHtml(proj.name)+(proj.uci?' - UCI: '+proj.uci:'')+'</div>'+
+        '</div>'+
+        '<div style="text-align:right;">'+
+        '<div style="font-size:11px;color:#4a7060;text-transform:uppercase;letter-spacing:.08em;">Yearly Budget</div>'+
+        '<div style="font-size:18px;font-weight:bold;color:#c8f0dc;">'+fmtCur(budget)+'</div>'+
+        '</div></div>'+
+
+        // Big progress bar
+        '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;">'+
+        '<span style="color:#7a9888;">'+fmtCur(totalBilled)+' billed</span>'+
+        '<span style="color:'+(over?"#c85a3a":"#7eb8a4")+';font-weight:bold;">'+(over?fmtCur(Math.abs(remaining))+' over budget':fmtCur(remaining)+' remaining')+'</span>'+
+        '</div>'+
+        '<div style="background:#0f1923;border-radius:6px;height:12px;overflow:hidden;margin-bottom:4px;">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+barColor+';border-radius:6px;transition:width .4s;"></div>'+
+        '</div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:#4a7060;margin-bottom:20px;">'+
+        '<span>0%</span><span>'+pct.toFixed(0)+'% used</span><span>100%</span>'+
+        '</div>'+
+
+        // Monthly bar chart
+        '<div style="font-size:12px;color:#7a9888;margin-bottom:10px;">Monthly Billing vs. Budget Pace</div>'+
+        '<div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:6px;">'+
+        months.map(function(m,i){
+          var amt=monthlyAmts[i];
+          var barH=amt>0?Math.max(6,(amt/maxMonth)*100):3;
+          var paceH=Math.max(3,(monthlyBudget/maxMonth)*100);
+          var isCur=i===currentMonth;
+          var isPast=i<currentMonth;
+          return'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;">'+
+            // Budget pace line marker
+            '<div style="position:absolute;bottom:'+paceH+'%;left:0;right:0;border-top:1px dashed #2d4a5e;"></div>'+
+            // Actual bar
+            '<div style="width:100%;height:'+barH+'%;background:'+(isCur?"#5db89a":isPast?"#2d7a5e":"#1a3a2e")+';border-radius:3px 3px 0 0;min-height:3px;"></div>'+
+            '</div>';
+        }).join("")+
+        '</div>'+
+        '<div style="display:flex;gap:0;margin-bottom:4px;">'+
+        months.map(function(m,i){
+          return'<div style="flex:1;text-align:center;font-size:8px;color:'+(i===currentMonth?"#7eb8a4":"#4a7060")+';">'+m+'</div>';
+        }).join("")+
+        '</div>'+
+        '<div style="display:flex;gap:16px;font-size:11px;color:#4a7060;margin-top:8px;">'+
+        '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#2d7a5e;border-radius:2px;display:inline-block;"></span>Billed</span>'+
+        '<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:2px;border-top:1px dashed #2d4a5e;display:inline-block;"></span>Monthly budget pace ('+fmtCur(monthlyBudget)+')</span>'+
+        '</div>'+
+        '</div>';
+    });
+  }
+  var clientTotals=(appData.clients||[]).map(function(c){
+    var ce=entries.filter(function(e){return e.clientId===c.id;});
+    var mins=ce.reduce(function(s,e){return s+e.duration;},0);
+    var amt=ce.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+    return{client:c,mins:mins,amt:amt};
+  }).filter(function(x){return x.mins>0;}).sort(function(a,b){return b.amt-a.amt;});
+  if(clientTotals.length>0){
+    html+='<div class="card" style="margin-bottom:24px;"><div style="font-size:13px;font-weight:bold;color:#c8f0dc;margin-bottom:12px;">Client Summary</div>'+
+      '<table style="width:100%;border-collapse:collapse;">';
+    clientTotals.forEach(function(x){
+      html+='<tr><td style="padding:9px 8px;font-size:13px;color:#e8e0d4;border-bottom:1px solid #1a2d3a;">'+escHtml(x.client.name)+'</td>'+
+        '<td style="padding:9px 8px;font-size:13px;color:#c8f0dc;text-align:right;border-bottom:1px solid #1a2d3a;">'+fmtDur(x.mins)+'</td>'+
+        '<td style="padding:9px 8px;font-size:14px;color:#7eb8a4;font-weight:bold;text-align:right;border-bottom:1px solid #1a2d3a;">'+fmtCur(x.amt)+'</td></tr>';
+    });
+    html+='</table></div>';
+  }
+  var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var year=new Date().getFullYear();
+  var monthlyData=months.map(function(m,i){
+    var ms=year+"-"+(i+1).toString().padStart(2,"0");
+    var me=entries.filter(function(e){return e.date&&e.date.startsWith(ms);});
+    return{month:m,income:me.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0)};
+  });
+  var maxM=Math.max.apply(null,monthlyData.map(function(m){return m.income;}));
+  if(maxM>0){
+    html+='<div class="card"><div style="font-size:13px;font-weight:bold;color:#c8f0dc;margin-bottom:16px;">'+year+' Monthly Income</div>'+
+      '<div style="display:flex;align-items:flex-end;gap:6px;height:100px;">';
+    monthlyData.forEach(function(m){
+      var h=m.income>0?Math.max(8,(m.income/maxM)*100):4;
+      var isCur=months[new Date().getMonth()]===m.month;
+      html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'+
+        '<div style="width:100%;height:'+h+'%;background:'+(isCur?"#5db89a":"#2d7a5e")+';border-radius:4px 4px 0 0;min-height:4px;"></div>'+
+        '<div style="font-size:9px;color:'+(isCur?"#7eb8a4":"#4a7060")+';">'+m.month+'</div></div>';
+    });
+    html+='</div></div>';
+  }
+  return html;
+}
+
+// TAX
+function renderTax(){
+  var year=new Date().getFullYear();
+  var entries=(appData.entries||[]).filter(function(e){return e.date&&e.date.startsWith(year.toString());});
+  var expenses=(appData.expenses||[]).filter(function(e){return e.date&&e.date.startsWith(year.toString());});
+  var gross=entries.reduce(function(s,e){return s+(e.duration/60)*e.rate;},0);
+  var totalExp=expenses.reduce(function(s,e){return s+e.amount;},0);
+  var net=Math.max(0,gross-totalExp);
+  var seBase=net*0.9235;
+  var seTax=seBase*0.153;
+  var seDeduct=seTax*0.5;
+  var taxable=net-seDeduct;
+  var stateRate=parseFloat(appData.stateTaxRate)||0.093;
+  var stateTax=taxable*stateRate;
+  var totalTax=seTax+stateTax;
+  var quarterly=totalTax/4;
+  var qDates=[
+    {q:"Q1",period:"Jan 1 - Mar 31",due:"April 15, 2026"},
+    {q:"Q2",period:"Apr 1 - May 31",due:"June 16, 2026"},
+    {q:"Q3",period:"Jun 1 - Aug 31",due:"September 15, 2026"},
+    {q:"Q4",period:"Sep 1 - Dec 31",due:"January 15, 2027"}
+  ];
+  var html='<div style="font-size:22px;font-weight:bold;color:#ffffff;margin-bottom:4px;">Tax Dashboard</div>'+
+    '<div style="font-size:13px;color:#4a7060;margin-bottom:20px;">'+year+' Tax Year</div>'+
+    '<div style="background:#1a3a2e;border:1px solid #2d7a5e;border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">'+
+    '<div><div style="font-size:11px;color:#4a7060;text-transform:uppercase;margin-bottom:3px;">Next Quarterly Payment</div>'+
+    '<div style="font-size:16px;font-weight:bold;color:#c8f0dc;">June 16, 2026</div></div>'+
+    '<div style="text-align:right;"><div style="font-size:11px;color:#4a7060;text-transform:uppercase;">Est. Payment</div>'+
+    '<div style="font-size:22px;font-weight:bold;color:#7eb8a4;">'+fmtCur(quarterly)+'</div></div></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">';
+  [["Gross Income",fmtCur(gross),"#c8f0dc"],["Deductible Expenses",fmtCur(totalExp),"#c8a87e"],
+   ["Net Income",fmtCur(net),"#c8f0dc"],["Set Aside Total",fmtCur(totalTax),"#e87a7a"]].forEach(function(item){
+    html+='<div style="background:#17232f;border:1px solid #2a3d4f;border-radius:10px;padding:14px 16px;">'+
+      '<div style="font-size:10px;color:#4a7060;text-transform:uppercase;margin-bottom:4px;">'+item[0]+'</div>'+
+      '<div style="font-size:20px;font-weight:bold;color:'+item[2]+';">'+item[1]+'</div></div>';
+  });
+  html+='</div>';
+  html+='<div class="card" style="margin-bottom:20px;"><div style="font-size:14px;font-weight:bold;color:#c8f0dc;margin-bottom:14px;">Tax Breakdown</div>';
+  [
+    {label:"Gross Income",value:gross},
+    {label:"Business Expenses",value:-totalExp},
+    {label:"Net Income",value:net,bold:true},
+    {label:"SE Tax Base (net x 92.35%)",value:seBase},
+    {label:"Federal SE Tax (15.3%)",value:seTax},
+    {label:"SE Tax Deduction",value:-seDeduct},
+    {label:"CA State Tax ("+Math.round(stateRate*100)+"%)",value:stateTax},
+    {label:"Total Estimated Tax",value:totalTax,bold:true,highlight:true}
+  ].forEach(function(item){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e3040;'+(item.highlight?"background:rgba(232,122,122,.08);":"")+'">'+
+      '<div style="font-size:13px;color:'+(item.bold?"#e8e0d4":"#a8c8b8")+';font-weight:'+(item.bold?"bold":"normal")+';">'+item.label+'</div>'+
+      '<div style="font-size:14px;font-weight:'+(item.bold?"bold":"normal")+';color:'+(item.value<0?"#c8a87e":item.highlight?"#e87a7a":item.bold?"#c8f0dc":"#7eb8a4")+';">'+
+      (item.value<0?"- "+fmtCur(Math.abs(item.value)):fmtCur(item.value))+'</div></div>';
+  });
+  html+='</div>';
+  html+='<div class="card" style="margin-bottom:20px;"><div style="font-size:14px;font-weight:bold;color:#c8f0dc;margin-bottom:6px;">CA State Tax Rate</div>'+
+    '<div style="font-size:12px;color:#4a7060;margin-bottom:12px;">Adjust to match your bracket. Common: ~6% at $50k, ~9.3% at $65k+</div>'+
+    '<div style="display:flex;gap:10px;align-items:center;">'+
+    '<input class="field-input" type="number" step="0.1" min="0" max="15" id="state-rate-input" value="'+Math.round(stateRate*1000)/10+'" style="max-width:100px;">'+
+    '<span style="color:#7a9888;">%</span>'+
+    '<button class="btn-primary" style="font-size:13px;padding:8px 16px;" onclick="saveStateRate()">Save Rate</button></div></div>';
+  html+='<div class="card"><div style="font-size:14px;font-weight:bold;color:#c8f0dc;margin-bottom:14px;">2026 Quarterly Due Dates</div>';
+  qDates.forEach(function(q){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1e3040;">'+
+      '<div><div style="font-size:13px;font-weight:bold;color:#c8f0dc;">'+q.q+'</div>'+
+      '<div style="font-size:11px;color:#4a7060;">'+q.period+'</div></div>'+
+      '<div style="text-align:right;"><div style="font-size:13px;color:#7eb8a4;font-weight:bold;">'+fmtCur(quarterly)+'</div>'+
+      '<div style="font-size:11px;color:#4a7060;">'+q.due+'</div></div></div>';
+  });
+  html+='<div style="font-size:11px;color:#4a7060;margin-top:12px;line-height:1.6;">Pay federal: irs.gov/payments &nbsp; Pay CA state: ftb.ca.gov</div></div>';
+  return html;
+}
+
+function saveStateRate(){
+  var inp=$("state-rate-input");if(!inp)return;
+  appData.stateTaxRate=(parseFloat(inp.value)||9.3)/100;
+  saveData();renderView("tax");
+}
+
+// TASKS
+function renderTasks(){
+  var taskList=tasks();
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
+    '<div><div style="font-size:22px;font-weight:bold;color:#ffffff;">Tasks</div>'+
+    '<div style="font-size:12px;color:#4a7060;margin-top:2px;">'+taskList.length+' tasks shown in every time entry</div></div>'+
+    (appData.customTasks?'<button class="btn-secondary" style="font-size:12px;" onclick="resetTasks()">Reset to Defaults</button>':'')+
+    '</div>'+
+    '<div class="card" style="margin-bottom:16px;border-color:#2d5a3e;">'+
+    '<div class="field-label" style="margin-bottom:8px;">Add New Task</div>'+
+    '<div style="display:flex;gap:8px;">'+
+    '<input class="field-input" id="new-task-input" placeholder="Task name..." onkeydown="if(event.key===\'Enter\')addTask()">'+
+    '<button class="btn-primary" style="white-space:nowrap;" onclick="addTask()">+ Add</button></div></div>'+
+    '<input class="field-input" id="task-search" placeholder="Search tasks..." oninput="filterTaskList()" style="margin-bottom:12px;">'+
+    '<div class="card" style="padding:0;overflow:hidden;" id="task-list">';
+  taskList.forEach(function(t,i){
+    html+='<div style="display:flex;align-items:center;padding:11px 14px;border-bottom:1px solid #1a2d3a;">'+
+      '<div style="flex:1;font-size:13px;color:#e8e0d4;">'+escHtml(t)+'</div>'+
+      '<button class="btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;margin-right:6px;" onclick="editTask('+i+')">Edit</button>'+
+      '<button class="btn-danger" style="font-size:11px;padding:4px 8px;flex-shrink:0;" onclick="deleteTask('+i+')">x</button></div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function filterTaskList(){
+  var search=$("task-search")?$("task-search").value.toLowerCase():"";
+  var tl=$("task-list");if(!tl)return;
+  var taskList=tasks();
+  var html="";
+  taskList.forEach(function(t,i){
+    if(t.toLowerCase().indexOf(search)>=0){
+      html+='<div style="display:flex;align-items:center;padding:11px 14px;border-bottom:1px solid #1a2d3a;">'+
+        '<div style="flex:1;font-size:13px;color:#e8e0d4;">'+escHtml(t)+'</div>'+
+        '<button class="btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;margin-right:6px;" onclick="editTask('+i+')">Edit</button>'+
+        '<button class="btn-danger" style="font-size:11px;padding:4px 8px;flex-shrink:0;" onclick="deleteTask('+i+')">x</button></div>';
+    }
+  });
+  tl.innerHTML=html;
+}
+
+function addTask(){
+  var inp=$("new-task-input");if(!inp||!inp.value.trim())return;
+  var t=tasks().concat([inp.value.trim()]);
+  appData.customTasks=t;saveData();renderView("tasks");
+}
+
+function editTask(i){
+  var t=tasks();
+  var newVal=prompt("Edit task:",t[i]);
+  if(newVal&&newVal.trim()){
+    t[i]=newVal.trim();appData.customTasks=t;saveData();renderView("tasks");
+  }
+}
+
+function deleteTask(i){
+  var t=tasks().filter(function(_,idx){return idx!==i;});
+  appData.customTasks=t;saveData();renderView("tasks");
+}
+
+function resetTasks(){
+  if(confirm("Reset to original 49 IF tasks? All edits will be lost.")){
+    appData.customTasks=null;saveData();renderView("tasks");
+  }
+}
+
+// SETTINGS
+function renderSettings(){
+  return'<div style="font-size:22px;font-weight:bold;color:#ffffff;margin-bottom:20px;">Settings</div>'+
+    '<div class="card">'+
+    '<div style="font-size:14px;font-weight:bold;color:#c8f0dc;margin-bottom:14px;">Business Information</div>'+
+    '<div style="display:grid;gap:14px;">'+
+    '<div><div class="field-label">Business Name</div><input class="field-input" id="s-bizname" value="'+escHtml(appData.businessName||"Empowerment Services")+'"></div>'+
+    '<div><div class="field-label">Address Line 1</div><input class="field-input" id="s-addr1" value="'+escHtml(appData.address1||"")+'" placeholder="Street address"></div>'+
+    '<div><div class="field-label">Address Line 2</div><input class="field-input" id="s-addr2" value="'+escHtml(appData.address2||"")+'" placeholder="City, State ZIP"></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+    '<div><div class="field-label">Phone</div><input class="field-input" id="s-phone" value="'+escHtml(appData.bizPhone||"")+'"></div>'+
+    '<div><div class="field-label">Email</div><input class="field-input" id="s-email" value="'+escHtml(appData.bizEmail||"")+'"></div></div>'+
+    '<div><div class="field-label">Default Hourly Rate ($)</div><input class="field-input" type="number" id="s-rate" value="'+appData.hourlyRate+'"></div>'+
+    '<button class="btn-primary" onclick="saveSettings()" id="settings-save-btn">Save Settings</button>'+
+    '</div></div>';
+}
+
+function saveSettings(){
+  appData.businessName=$("s-bizname")?$("s-bizname").value:"";
+  appData.address1=$("s-addr1")?$("s-addr1").value:"";
+  appData.address2=$("s-addr2")?$("s-addr2").value:"";
+  appData.bizPhone=$("s-phone")?$("s-phone").value:"";
+  appData.bizEmail=$("s-email")?$("s-email").value:"";
+  appData.hourlyRate=parseFloat($("s-rate")?$("s-rate").value:75)||75;
+  saveData();
+  var btn=$("settings-save-btn");if(btn){btn.textContent="Saved!";setTimeout(function(){btn.textContent="Save Settings";},2000);}
+}
+
+function escHtml(s){
+  if(!s)return"";
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>
